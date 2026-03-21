@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --color-dark-950: #09090b;
+  --color-dark-900: #0f1117;
+  --color-dark-800: #151821;
+  --color-dark-700: #1c2030;
+  --color-dark-600: #252a3a;
+  --color-dark-500: #363d52;
+  --color-dark-400: #4a5270;
+  --color-dark-300: #6b7394;
+  --color-dark-200: #9098b1;
+  --color-dark-100: #c0c6d9;
+  --color-accent-600: #1a5cff;
+  --color-accent-500: #3b7aff;
+  --color-accent-400: #5e94ff;
+  --color-accent-300: #89b2ff;
+  --color-accent-200: #b5d0ff;
+  --color-accent-glow: rgba(59, 122, 255, 0.15);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-dark-500) transparent;
+}
+
+body {
+  background-color: var(--color-dark-950);
+  color: var(--color-dark-100);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+::selection {
+  background-color: var(--color-accent-600);
+  color: white;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.5);
+}
+
+/* Custom select styling */
+select option {
+  background-color: #0f1117;
+  color: #c0c6d9;
+  padding: 8px 12px;
+}
+
+select:focus option:checked {
+  background-color: #1a5cff;
+  color: white;
+}
