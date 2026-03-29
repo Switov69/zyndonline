@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Eye, EyeOff, Bell, BellOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
@@ -12,6 +12,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [showNotifPopup, setShowNotifPopup] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,10 +39,30 @@ export default function Register() {
     }
     const ok = register(username.trim(), password, telegram.trim());
     if (ok) {
-      navigate('/');
+      // Show notification popup before navigating
+      setShowNotifPopup(true);
     } else {
       setError('Пользователь с таким никнеймом уже существует');
     }
+  };
+
+  const handleEnableNotifications = async () => {
+    if ('Notification' in window) {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        new Notification('Zynd.online', {
+          body: 'Уведомления включены! Теперь вы будете в курсе всех событий.',
+          icon: '/favicon.ico',
+        });
+      }
+    }
+    setShowNotifPopup(false);
+    navigate('/');
+  };
+
+  const handleSkipNotifications = () => {
+    setShowNotifPopup(false);
+    navigate('/');
   };
 
   return (
@@ -137,6 +158,37 @@ export default function Register() {
           </p>
         </form>
       </div>
+
+      {/* Notification popup */}
+      {showNotifPopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-14 h-14 rounded-2xl bg-accent-500/15 flex items-center justify-center mx-auto mb-4">
+              <Bell size={26} className="text-accent-400" />
+            </div>
+            <h3 className="text-white font-bold text-lg mb-2">Добро пожаловать!</h3>
+            <p className="text-dark-300 text-sm mb-6 leading-relaxed">
+              Включите уведомления, чтобы узнавать когда кто-то берёт ваш заказ или появляются новые вакансии.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleEnableNotifications}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                <Bell size={16} />
+                Включить уведомления
+              </button>
+              <button
+                onClick={handleSkipNotifications}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                <BellOff size={16} />
+                Пропустить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

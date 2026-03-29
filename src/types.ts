@@ -1,3 +1,14 @@
+export interface Rating {
+  count: number;
+  total: number;
+}
+
+export interface SubscriptionInfo {
+  active: boolean;
+  expiresAt?: string;
+  profileBg?: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -8,6 +19,8 @@ export interface User {
   jobsCompleted: number;
   blocked?: boolean;
   isAdmin?: boolean;
+  rating?: Rating;
+  subscription?: SubscriptionInfo;
 }
 
 export type JobCategory = 'building' | 'redstone' | 'terraforming' | 'interior' | 'pixel_art' | 'other';
@@ -27,6 +40,20 @@ export interface Job {
   tags: string[];
   takenById?: string;
   takenByName?: string;
+  jobImage?: string;
+  ratingForExecutor?: number;
+  ratingForAuthor?: number;
+  executorId?: string;
+  executorName?: string;
+  premiumBoostedAt?: string;
+}
+
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  username: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 export const CATEGORY_LABELS: Record<JobCategory, string> = {
@@ -46,3 +73,14 @@ export const CATEGORY_COLORS: Record<JobCategory, string> = {
   pixel_art: 'bg-pink-500/15 text-pink-400 border-pink-500/20',
   other: 'bg-dark-400/30 text-dark-200 border-dark-400/30',
 };
+
+export const GRADIENT_PRESETS: { key: string; label: string; value: string }[] = [
+  { key: 'purple', label: 'Фиолетовый', value: 'linear-gradient(135deg, #3b0764 0%, #7c3aed 100%)' },
+  { key: 'ocean', label: 'Океан', value: 'linear-gradient(135deg, #0c4a6e 0%, #0ea5e9 100%)' },
+  { key: 'sunset', label: 'Закат', value: 'linear-gradient(135deg, #7f1d1d 0%, #f97316 100%)' },
+  { key: 'forest', label: 'Лес', value: 'linear-gradient(135deg, #052e16 0%, #22c55e 100%)' },
+  { key: 'midnight', label: 'Полночь', value: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)' },
+  { key: 'rose', label: 'Роза', value: 'linear-gradient(135deg, #4c0519 0%, #f43f5e 100%)' },
+  { key: 'gold', label: 'Золото', value: 'linear-gradient(135deg, #422006 0%, #eab308 100%)' },
+  { key: 'cyber', label: 'Кибер', value: 'linear-gradient(135deg, #042f2e 0%, #2dd4bf 100%)' },
+];

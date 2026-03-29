@@ -9,6 +9,7 @@ import CreateJob from './pages/CreateJob';
 import Profile from './pages/Profile';
 import JobDetails from './pages/JobDetails';
 import Admin from './pages/Admin';
+import UserProfile from './pages/UserProfile';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -33,6 +34,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/job/:id" element={<JobDetails />} />
+              <Route path="/user/:id" element={<UserProfile />} />
               <Route
                 path="/create"
                 element={

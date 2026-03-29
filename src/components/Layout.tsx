@@ -16,7 +16,7 @@ export default function Layout() {
             <span className="text-dark-600 text-sm ml-1">· Поиск работы на КБ</span>
           </div>
           <p className="text-dark-600 text-xs">
-            © 2025 Zynd. Все права защищены.
+            © 2026 Zynd. Все права защищены.
           </p>
         </div>
       </footer>
