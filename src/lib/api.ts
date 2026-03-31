@@ -12,139 +12,132 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T;
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
 export const api = {
+  // ── Auth (login, register) ────────────────────────────────────────────────
   auth: {
     login: (username: string, password: string) =>
-      req<{ user: User }>('/auth/login', {
+      req<{ user: User }>('/auth?action=login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       }),
 
     register: (username: string, password: string, telegram: string) =>
-      req<{ user: User }>('/auth/register', {
+      req<{ user: User }>('/auth?action=register', {
         method: 'POST',
         body: JSON.stringify({ username, password, telegram }),
       }),
+  },
 
+  // ── User ──────────────────────────────────────────────────────────────────
+  user: {
     me: (userId: string) =>
-      req<{ user: User }>(`/auth/me?userId=${userId}`),
+      req<{ user: User }>(`/user?action=me&userId=${userId}`),
+
+    getAllUsers: (adminId: string) =>
+      req<{ users: (User & { password: string })[] }>(`/user?action=all&adminId=${adminId}`),
 
     update: (userId: string, data: Partial<User & { subscription?: any }>) =>
-      req<{ user: User }>('/auth/update', {
+      req<{ user: User }>('/user?action=update', {
         method: 'PATCH',
         body: JSON.stringify({ userId, ...data }),
       }),
 
     changePassword: (userId: string, oldPassword: string, newPassword: string) =>
-      req<{ ok: boolean }>('/auth/change-password', {
+      req<{ ok: boolean }>('/user?action=change-password', {
         method: 'POST',
         body: JSON.stringify({ userId, oldPassword, newPassword }),
       }),
 
-    getAllUsers: (adminId: string) =>
-      req<{ users: (User & { password: string })[] }>(`/auth/users?adminId=${adminId}`),
-
-    getUserById: (id: string) =>
-      req<{ user: User }>(`/auth/me?userId=${id}`),
-
-    deleteUser: (adminId: string, targetUserId: string) =>
-      req<{ ok: boolean }>('/auth/delete', {
-        method: 'DELETE',
-        body: JSON.stringify({ adminId, targetUserId }),
-      }),
-
-    block: (adminId: string, targetUserId: string, blocked: boolean) =>
-      req<{ ok: boolean }>('/auth/block', {
+    rate: (targetUserId: string, stars: number, jobId: string, role: 'executor' | 'author') =>
+      req<{ ok: boolean }>('/user?action=rate', {
         method: 'POST',
-        body: JSON.stringify({ adminId, targetUserId, blocked }),
+        body: JSON.stringify({ targetUserId, stars, jobId, role }),
       }),
 
     adminUpdate: (adminId: string, targetUserId: string, data: any) =>
-      req<{ ok: boolean }>('/auth/block', {
+      req<{ ok: boolean }>('/user?action=admin-update', {
         method: 'POST',
         body: JSON.stringify({ adminId, targetUserId, data }),
       }),
 
-    rate: (targetUserId: string, stars: number, jobId: string, role: 'executor' | 'author') =>
-      req<{ ok: boolean }>('/auth/rate', {
+    block: (adminId: string, targetUserId: string, blocked: boolean) =>
+      req<{ ok: boolean }>('/user?action=admin-update', {
         method: 'POST',
-        body: JSON.stringify({ targetUserId, stars, jobId, role }),
+        body: JSON.stringify({ adminId, targetUserId, blocked }),
+      }),
+
+    deleteUser: (adminId: string, targetUserId: string) =>
+      req<{ ok: boolean }>('/user?action=delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ adminId, targetUserId }),
       }),
   },
 
-  // ─── Jobs ──────────────────────────────────────────────────────────────────
+  // ── Jobs ──────────────────────────────────────────────────────────────────
   jobs: {
     list: () =>
-      req<{ jobs: Job[] }>('/jobs/index'),
+      req<{ jobs: Job[] }>('/jobs'),
 
     get: (id: string) =>
-      req<{ job: Job }>(`/jobs/${id}`),
+      req<{ job: Job }>(`/jobs?id=${id}`),
 
     create: (data: {
-      title: string;
-      description: string;
-      category: string;
-      budget: string;
-      authorId: string;
-      authorName: string;
-      authorAvatar: string;
-      authorTelegram: string;
-      jobImage?: string;
+      title: string; description: string; category: string; budget: string;
+      authorId: string; authorName: string; authorAvatar: string;
+      authorTelegram: string; jobImage?: string;
     }) =>
-      req<{ job: Job }>('/jobs/index', {
+      req<{ job: Job }>('/jobs', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
 
     update: (id: string, data: Partial<Job>) =>
-      req<{ job: Job }>(`/jobs/${id}`, {
+      req<{ job: Job }>(`/jobs?id=${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
 
     delete: (id: string) =>
-      req<{ ok: boolean }>(`/jobs/${id}`, { method: 'DELETE' }),
+      req<{ ok: boolean }>(`/jobs?id=${id}`, { method: 'DELETE' }),
 
     take: (jobId: string, userId: string, userName: string) =>
-      req<{ job: Job; authorId: string }>('/jobs/take', {
+      req<{ job: Job; authorId: string }>('/jobs?action=take', {
         method: 'POST',
         body: JSON.stringify({ jobId, userId, userName }),
       }),
 
     complete: (jobId: string) =>
-      req<{ job: Job }>('/jobs/complete', {
+      req<{ job: Job }>('/jobs?action=complete', {
         method: 'POST',
         body: JSON.stringify({ jobId }),
       }),
 
     cancel: (jobId: string) =>
-      req<{ job: Job }>('/jobs/cancel', {
+      req<{ job: Job }>('/jobs?action=cancel', {
         method: 'POST',
         body: JSON.stringify({ jobId }),
       }),
   },
 
-  // ─── Payments ──────────────────────────────────────────────────────────────
+  // ── Payments ──────────────────────────────────────────────────────────────
   payments: {
     list: (adminId: string) =>
-      req<{ payments: PaymentRequest[] }>(`/payments/index?adminId=${adminId}`),
+      req<{ payments: PaymentRequest[] }>(`/payments?action=list&adminId=${adminId}`),
 
     submit: (userId: string, username: string) =>
-      req<{ payment: PaymentRequest }>('/payments/index', {
+      req<{ payment: PaymentRequest }>('/payments?action=submit', {
         method: 'POST',
         body: JSON.stringify({ userId, username }),
       }),
 
     approve: (adminId: string, requestId: string) =>
-      req<{ ok: boolean; expiresAt: string }>('/payments/approve', {
+      req<{ ok: boolean; expiresAt: string }>('/payments?action=approve', {
         method: 'POST',
         body: JSON.stringify({ adminId, requestId }),
       }),
 
     reject: (adminId: string, requestId: string) =>
-      req<{ ok: boolean }>('/payments/reject', {
+      req<{ ok: boolean }>('/payments?action=reject', {
         method: 'POST',
         body: JSON.stringify({ adminId, requestId }),
       }),

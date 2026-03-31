@@ -28,20 +28,18 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
 const USER_KEY = 'zynd_uid';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount: restore session from stored user ID
   useEffect(() => {
     const storedId = localStorage.getItem(USER_KEY);
     if (!storedId) { setLoading(false); return; }
-    api.auth.me(storedId)
-      .then(({ user: u }) => { setUser(u); })
-      .catch(() => { localStorage.removeItem(USER_KEY); })
+    api.user.me(storedId)
+      .then(({ user: u }) => setUser(u))
+      .catch(() => localStorage.removeItem(USER_KEY))
       .finally(() => setLoading(false));
   }, []);
 
@@ -51,9 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       localStorage.setItem(USER_KEY, u.id);
       return true;
-    } catch (e: any) {
-      return e.message || 'Ошибка входа';
-    }
+    } catch (e: any) { return e.message || 'Ошибка входа'; }
   }, []);
 
   const register = useCallback(async (username: string, password: string, telegram: string): Promise<string | true> => {
@@ -62,9 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       localStorage.setItem(USER_KEY, u.id);
       return true;
-    } catch (e: any) {
-      return e.message || 'Ошибка регистрации';
-    }
+    } catch (e: any) { return e.message || 'Ошибка регистрации'; }
   }, []);
 
   const logout = useCallback(() => {
@@ -75,67 +69,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = useCallback(async () => {
     if (!user) return;
     try {
-      const { user: u } = await api.auth.me(user.id);
+      const { user: u } = await api.user.me(user.id);
       setUser(u);
     } catch { /* ignore */ }
   }, [user]);
 
   const updateUser = useCallback(async (data: Partial<User>) => {
     if (!user) return;
-    try {
-      const { user: u } = await api.auth.update(user.id, data);
-      setUser(u);
-    } catch (e: any) {
-      throw new Error(e.message);
-    }
+    const { user: u } = await api.user.update(user.id, data);
+    setUser(u);
   }, [user]);
 
   const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<string | true> => {
     if (!user) return 'Не авторизован';
     try {
-      await api.auth.changePassword(user.id, oldPassword, newPassword);
+      await api.user.changePassword(user.id, oldPassword, newPassword);
       return true;
-    } catch (e: any) {
-      return e.message || 'Ошибка смены пароля';
-    }
+    } catch (e: any) { return e.message || 'Ошибка смены пароля'; }
   }, [user]);
 
   const getAllUsers = useCallback(async () => {
     if (!user?.isAdmin) return [];
-    try {
-      const { users } = await api.auth.getAllUsers(user.id);
-      return users;
-    } catch { return []; }
+    try { const { users } = await api.user.getAllUsers(user.id); return users; }
+    catch { return []; }
   }, [user]);
 
   const getUserById = useCallback(async (id: string): Promise<User | null> => {
-    try {
-      const { user: u } = await api.auth.getUserById(id);
-      return u;
-    } catch { return null; }
+    try { const { user: u } = await api.user.me(id); return u; }
+    catch { return null; }
   }, []);
 
   const adminUpdateUser = useCallback(async (userId: string, data: any) => {
     if (!user?.isAdmin) return;
-    await api.auth.adminUpdate(user.id, userId, data);
+    await api.user.adminUpdate(user.id, userId, data);
   }, [user]);
 
   const adminSetBlocked = useCallback(async (userId: string, blocked: boolean) => {
     if (!user?.isAdmin) return;
-    await api.auth.block(user.id, userId, blocked);
+    await api.user.block(user.id, userId, blocked);
   }, [user]);
 
   const adminDeleteUser = useCallback(async (userId: string) => {
     if (!user?.isAdmin) return;
-    await api.auth.deleteUser(user.id, userId);
+    await api.user.deleteUser(user.id, userId);
   }, [user]);
 
   const getPaymentRequests = useCallback(async (): Promise<PaymentRequest[]> => {
     if (!user?.isAdmin) return [];
-    try {
-      const { payments } = await api.payments.list(user.id);
-      return payments;
-    } catch { return []; }
+    try { const { payments } = await api.payments.list(user.id); return payments; }
+    catch { return []; }
   }, [user]);
 
   const submitPaymentRequest = useCallback(async () => {
@@ -153,34 +135,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.payments.reject(user.id, requestId);
   }, [user]);
 
-  const rateUser = useCallback(async (
-    userId: string, stars: number, jobId: string, role: 'executor' | 'author',
-  ) => {
-    await api.auth.rate(userId, stars, jobId, role);
+  const rateUser = useCallback(async (userId: string, stars: number, jobId: string, role: 'executor' | 'author') => {
+    await api.user.rate(userId, stars, jobId, role);
   }, []);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      isAuthenticated: !!user,
-      isAdmin: !!user?.isAdmin,
-      loading,
-      login,
-      register,
-      logout,
-      updateUser,
-      changePassword,
-      refreshUser,
-      getAllUsers,
-      getUserById,
-      adminUpdateUser,
-      adminSetBlocked,
-      adminDeleteUser,
-      getPaymentRequests,
-      submitPaymentRequest,
-      approvePayment,
-      rejectPayment,
-      rateUser,
+      user, isAuthenticated: !!user, isAdmin: !!user?.isAdmin, loading,
+      login, register, logout, updateUser, changePassword, refreshUser,
+      getAllUsers, getUserById, adminUpdateUser, adminSetBlocked, adminDeleteUser,
+      getPaymentRequests, submitPaymentRequest, approvePayment, rejectPayment, rateUser,
     }}>
       {children}
     </AuthContext.Provider>

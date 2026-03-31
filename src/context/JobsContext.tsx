@@ -54,8 +54,6 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const takeJob = useCallback(async (jobId: string, userId: string, userName: string) => {
     const { job, authorId } = await api.jobs.take(jobId, userId, userName);
     setJobs(prev => prev.map(j => j.id === jobId ? job : j));
-
-    // Desktop notification for the job author (only if current user IS the author)
     const storedId = localStorage.getItem('zynd_uid');
     if (storedId === authorId && 'Notification' in window && Notification.permission === 'granted') {
       const jobTitle = jobs.find(j => j.id === jobId)?.title || '';
@@ -68,8 +66,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
 
   const completeJob = useCallback(async (jobId: string) => {
     const { job } = await api.jobs.complete(jobId);
-    // Remove from list (done jobs don't show on main feed)
-    setJobs(prev => prev.filter(j => j.id !== jobId).concat(job));
+    setJobs(prev => prev.map(j => j.id === jobId ? job : j));
   }, []);
 
   const deleteJob = useCallback(async (jobId: string) => {
