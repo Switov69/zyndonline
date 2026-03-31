@@ -23,7 +23,13 @@ export interface User {
   subscription?: SubscriptionInfo;
 }
 
-export type JobCategory = 'building' | 'redstone' | 'terraforming' | 'interior' | 'pixel_art' | 'other';
+export type JobCategory =
+  | 'building'
+  | 'redstone'
+  | 'terraforming'
+  | 'interior'
+  | 'pixel_art'
+  | 'other';
 
 export interface Job {
   id: string;
@@ -37,7 +43,6 @@ export interface Job {
   authorTelegram: string;
   createdAt: string;
   status: 'open' | 'in_progress' | 'done';
-  tags: string[];
   takenById?: string;
   takenByName?: string;
   jobImage?: string;
@@ -46,6 +51,7 @@ export interface Job {
   executorId?: string;
   executorName?: string;
   premiumBoostedAt?: string;
+  authorPremium?: boolean;
 }
 
 export interface PaymentRequest {
@@ -75,12 +81,12 @@ export const CATEGORY_COLORS: Record<JobCategory, string> = {
 };
 
 export const GRADIENT_PRESETS: { key: string; label: string; value: string }[] = [
-  { key: 'purple', label: 'Фиолетовый', value: 'linear-gradient(135deg, #3b0764 0%, #7c3aed 100%)' },
-  { key: 'ocean', label: 'Океан', value: 'linear-gradient(135deg, #0c4a6e 0%, #0ea5e9 100%)' },
-  { key: 'sunset', label: 'Закат', value: 'linear-gradient(135deg, #7f1d1d 0%, #f97316 100%)' },
-  { key: 'forest', label: 'Лес', value: 'linear-gradient(135deg, #052e16 0%, #22c55e 100%)' },
-  { key: 'midnight', label: 'Полночь', value: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)' },
-  { key: 'rose', label: 'Роза', value: 'linear-gradient(135deg, #4c0519 0%, #f43f5e 100%)' },
-  { key: 'gold', label: 'Золото', value: 'linear-gradient(135deg, #422006 0%, #eab308 100%)' },
-  { key: 'cyber', label: 'Кибер', value: 'linear-gradient(135deg, #042f2e 0%, #2dd4bf 100%)' },
+  { key: 'purple', label: 'Фиолетовый', value: 'linear-gradient(135deg,#3b0764 0%,#7c3aed 100%)' },
+  { key: 'ocean',  label: 'Океан',      value: 'linear-gradient(135deg,#0c4a6e 0%,#0ea5e9 100%)' },
+  { key: 'sunset', label: 'Закат',      value: 'linear-gradient(135deg,#7f1d1d 0%,#f97316 100%)' },
+  { key: 'forest', label: 'Лес',        value: 'linear-gradient(135deg,#052e16 0%,#22c55e 100%)' },
+  { key: 'midnight',label:'Полночь',    value: 'linear-gradient(135deg,#0f172a 0%,#334155 100%)' },
+  { key: 'rose',   label: 'Роза',       value: 'linear-gradient(135deg,#4c0519 0%,#f43f5e 100%)' },
+  { key: 'gold',   label: 'Золото',     value: 'linear-gradient(135deg,#422006 0%,#eab308 100%)' },
+  { key: 'cyber',  label: 'Кибер',      value: 'linear-gradient(135deg,#042f2e 0%,#2dd4bf 100%)' },
 ];

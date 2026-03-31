@@ -1,341 +1,187 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import {
+  createContext, useContext, useState, ReactNode, useCallback, useEffect,
+} from 'react';
 import { User, PaymentRequest } from '../types';
+import { api } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  login: (username: string, password: string) => boolean;
-  register: (username: string, password: string, telegram: string) => boolean;
+  loading: boolean;
+  login: (username: string, password: string) => Promise<string | true>;
+  register: (username: string, password: string, telegram: string) => Promise<string | true>;
   logout: () => void;
-  updateUser: (data: Partial<User>) => void;
-  changePassword: (oldPassword: string, newPassword: string) => string | true;
-  getAllUsers: () => (User & { password: string })[];
-  getUserById: (id: string) => (User & { password?: string }) | undefined;
-  adminUpdateUser: (userId: string, data: Partial<User & { password?: string }>) => void;
-  adminSetBlocked: (userId: string, blocked: boolean) => void;
-  // Subscription / payment
-  getPaymentRequests: () => PaymentRequest[];
-  submitPaymentRequest: () => void;
-  approvePayment: (requestId: string) => void;
-  rejectPayment: (requestId: string) => void;
-  // Rating
-  rateUser: (userId: string, stars: number) => void;
+  updateUser: (data: Partial<User>) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<string | true>;
+  refreshUser: () => Promise<void>;
+  getAllUsers: () => Promise<(User & { password: string })[]>;
+  getUserById: (id: string) => Promise<User | null>;
+  adminUpdateUser: (userId: string, data: any) => Promise<void>;
+  adminSetBlocked: (userId: string, blocked: boolean) => Promise<void>;
+  adminDeleteUser: (userId: string) => Promise<void>;
+  getPaymentRequests: () => Promise<PaymentRequest[]>;
+  submitPaymentRequest: () => Promise<void>;
+  approvePayment: (requestId: string) => Promise<void>;
+  rejectPayment: (requestId: string) => Promise<void>;
+  rateUser: (userId: string, stars: number, jobId: string, role: 'executor' | 'author') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const ADMIN_ID = 'admin_markizow_001';
-
-const ADMIN_ACCOUNT = {
-  id: ADMIN_ID,
-  username: 'Markizow',
-  password: 'testadmin',
-  avatar: '',
-  telegram: '@markizuw',
-  joinedAt: '2026-04-01',
-  jobsPosted: 0,
-  jobsCompleted: 0,
-  isAdmin: true,
-  blocked: false,
-  rating: { count: 0, total: 0 },
-  subscription: { active: false },
-};
-
-function ensureAdmin() {
-  const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-  const hasAdmin = accounts.find((a: any) => a.isAdmin);
-  if (!hasAdmin) {
-    accounts.push({ ...ADMIN_ACCOUNT });
-    localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-  } else {
-    // Update admin data if outdated
-    const idx = accounts.findIndex((a: any) => a.isAdmin);
-    if (idx >= 0) {
-      accounts[idx] = {
-        ...accounts[idx],
-        username: 'Markizow',
-        telegram: '@markizuw',
-        joinedAt: '2026-04-01',
-        id: accounts[idx].id === 'admin' ? ADMIN_ID : accounts[idx].id,
-      };
-      localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-    }
-  }
-}
+const USER_KEY = 'zynd_uid';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    ensureAdmin();
-    const saved = localStorage.getItem('zynd_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // On mount: restore session from stored user ID
   useEffect(() => {
-    if (!user) return;
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const acc = accounts.find((a: any) => a.id === user.id);
-    if (acc) {
-      const synced: User = {
-        id: acc.id,
-        username: acc.username,
-        avatar: acc.avatar || '',
-        telegram: acc.telegram || '',
-        joinedAt: acc.joinedAt,
-        jobsPosted: acc.jobsPosted || 0,
-        jobsCompleted: acc.jobsCompleted || 0,
-        blocked: acc.blocked || false,
-        isAdmin: acc.isAdmin || false,
-        rating: acc.rating || { count: 0, total: 0 },
-        subscription: acc.subscription || { active: false },
-      };
-      if (JSON.stringify(synced) !== JSON.stringify(user)) {
-        setUser(synced);
-        localStorage.setItem('zynd_user', JSON.stringify(synced));
-      }
+    const storedId = localStorage.getItem(USER_KEY);
+    if (!storedId) { setLoading(false); return; }
+    api.auth.me(storedId)
+      .then(({ user: u }) => { setUser(u); })
+      .catch(() => { localStorage.removeItem(USER_KEY); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const login = useCallback(async (username: string, password: string): Promise<string | true> => {
+    try {
+      const { user: u } = await api.auth.login(username, password);
+      setUser(u);
+      localStorage.setItem(USER_KEY, u.id);
+      return true;
+    } catch (e: any) {
+      return e.message || 'Ошибка входа';
     }
   }, []);
 
-  const login = useCallback((username: string, _password: string) => {
-    ensureAdmin();
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const found = accounts.find(
-      (a: any) =>
-        a.username.toLowerCase() === username.toLowerCase() && a.password === _password
-    );
-    if (!found) return false;
-    const u: User = {
-      id: found.id,
-      username: found.username,
-      avatar: found.avatar || '',
-      telegram: found.telegram || '',
-      joinedAt: found.joinedAt,
-      jobsPosted: found.jobsPosted || 0,
-      jobsCompleted: found.jobsCompleted || 0,
-      blocked: found.blocked || false,
-      isAdmin: found.isAdmin || false,
-      rating: found.rating || { count: 0, total: 0 },
-      subscription: found.subscription || { active: false },
-    };
-    setUser(u);
-    localStorage.setItem('zynd_user', JSON.stringify(u));
-    return true;
-  }, []);
-
-  const register = useCallback((username: string, password: string, telegram: string) => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const exists = accounts.find(
-      (a: any) => a.username.toLowerCase() === username.toLowerCase()
-    );
-    if (exists) return false;
-    const u: User = {
-      id: 'u_' + Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000),
-      username,
-      avatar: '',
-      telegram,
-      joinedAt: new Date().toISOString().split('T')[0],
-      jobsPosted: 0,
-      jobsCompleted: 0,
-      blocked: false,
-      isAdmin: false,
-      rating: { count: 0, total: 0 },
-      subscription: { active: false },
-    };
-    accounts.push({ ...u, password });
-    localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-    setUser(u);
-    localStorage.setItem('zynd_user', JSON.stringify(u));
-    return true;
+  const register = useCallback(async (username: string, password: string, telegram: string): Promise<string | true> => {
+    try {
+      const { user: u } = await api.auth.register(username, password, telegram);
+      setUser(u);
+      localStorage.setItem(USER_KEY, u.id);
+      return true;
+    } catch (e: any) {
+      return e.message || 'Ошибка регистрации';
+    }
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem('zynd_user');
+    localStorage.removeItem(USER_KEY);
   }, []);
 
-  const updateUser = useCallback((data: Partial<User>) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, ...data };
-      localStorage.setItem('zynd_user', JSON.stringify(updated));
-      const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-      const idx = accounts.findIndex((a: any) => a.id === updated.id);
-      if (idx >= 0) {
-        accounts[idx] = { ...accounts[idx], ...data };
-        localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-      }
-      // Sync avatar/username/telegram in all jobs
-      const jobs: any[] = JSON.parse(localStorage.getItem('zynd_jobs') || '[]');
-      let jobsChanged = false;
-      const updatedJobs = jobs.map((j: any) => {
-        let changed = false;
-        const jCopy = { ...j };
-        if (j.authorId === updated.id) {
-          if (data.username !== undefined) { jCopy.authorName = data.username; changed = true; }
-          if (data.avatar !== undefined) { jCopy.authorAvatar = data.avatar; changed = true; }
-          if (data.telegram !== undefined) { jCopy.authorTelegram = data.telegram; changed = true; }
-        }
-        if (j.takenById === updated.id && data.username !== undefined) {
-          jCopy.takenByName = data.username;
-          changed = true;
-        }
-        if (changed) jobsChanged = true;
-        return changed ? jCopy : j;
-      });
-      if (jobsChanged) {
-        localStorage.setItem('zynd_jobs', JSON.stringify(updatedJobs));
-        window.dispatchEvent(new Event('zynd_jobs_updated'));
-      }
-      return updated;
-    });
-  }, []);
-
-  const changePassword = useCallback((oldPassword: string, newPassword: string): string | true => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const currentUser = JSON.parse(localStorage.getItem('zynd_user') || 'null');
-    if (!currentUser) return 'Ошибка авторизации';
-    const idx = accounts.findIndex((a: any) => a.id === currentUser.id);
-    if (idx < 0) return 'Аккаунт не найден';
-    if (accounts[idx].password !== oldPassword) return 'Неверный текущий пароль';
-    if (oldPassword === newPassword) return 'Новый пароль не должен совпадать с текущим';
-    accounts[idx].password = newPassword;
-    localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-    return true;
-  }, []);
-
-  const getAllUsers = useCallback((): any[] => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    return accounts;
-  }, []);
-
-  const getUserById = useCallback((id: string) => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    return accounts.find((a: any) => a.id === id);
-  }, []);
-
-  const adminUpdateUser = useCallback((userId: string, data: Partial<User & { password?: string }>) => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const idx = accounts.findIndex((a: any) => a.id === userId);
-    if (idx < 0) return;
-    accounts[idx] = { ...accounts[idx], ...data };
-    localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
-
-    const jobs: any[] = JSON.parse(localStorage.getItem('zynd_jobs') || '[]');
-    let jobsChanged = false;
-    const updatedJobs = jobs.map((j: any) => {
-      let changed = false;
-      const jCopy = { ...j };
-      if (j.authorId === userId) {
-        if (data.username !== undefined) { jCopy.authorName = data.username; changed = true; }
-        if (data.avatar !== undefined) { jCopy.authorAvatar = data.avatar; changed = true; }
-        if (data.telegram !== undefined) { jCopy.authorTelegram = data.telegram; changed = true; }
-      }
-      if (j.takenById === userId && data.username !== undefined) {
-        jCopy.takenByName = data.username;
-        changed = true;
-      }
-      if (changed) jobsChanged = true;
-      return changed ? jCopy : j;
-    });
-    if (jobsChanged) {
-      localStorage.setItem('zynd_jobs', JSON.stringify(updatedJobs));
-      window.dispatchEvent(new Event('zynd_jobs_updated'));
-    }
-
-    const currentUser = JSON.parse(localStorage.getItem('zynd_user') || 'null');
-    if (currentUser && currentUser.id === userId) {
-      const updated = { ...currentUser, ...data };
-      delete (updated as any).password;
-      localStorage.setItem('zynd_user', JSON.stringify(updated));
-      setUser(updated);
-    }
-  }, []);
-
-  const adminSetBlocked = useCallback((userId: string, blocked: boolean) => {
-    adminUpdateUser(userId, { blocked });
-  }, [adminUpdateUser]);
-
-  // Payment requests
-  const getPaymentRequests = useCallback((): PaymentRequest[] => {
-    return JSON.parse(localStorage.getItem('zynd_payments') || '[]');
-  }, []);
-
-  const submitPaymentRequest = useCallback(() => {
+  const refreshUser = useCallback(async () => {
     if (!user) return;
-    const requests: PaymentRequest[] = JSON.parse(localStorage.getItem('zynd_payments') || '[]');
-    // Prevent duplicate pending
-    const alreadyPending = requests.find(r => r.userId === user.id && r.status === 'pending');
-    if (alreadyPending) return;
-    const newReq: PaymentRequest = {
-      id: 'pay_' + Date.now(),
-      userId: user.id,
-      username: user.username,
-      requestedAt: new Date().toISOString(),
-      status: 'pending',
-    };
-    requests.push(newReq);
-    localStorage.setItem('zynd_payments', JSON.stringify(requests));
-    window.dispatchEvent(new Event('zynd_payments_updated'));
+    try {
+      const { user: u } = await api.auth.me(user.id);
+      setUser(u);
+    } catch { /* ignore */ }
   }, [user]);
 
-  const approvePayment = useCallback((requestId: string) => {
-    const requests: PaymentRequest[] = JSON.parse(localStorage.getItem('zynd_payments') || '[]');
-    const idx = requests.findIndex(r => r.id === requestId);
-    if (idx < 0) return;
-    requests[idx].status = 'approved';
-    localStorage.setItem('zynd_payments', JSON.stringify(requests));
-    // Grant subscription for 3 weeks
-    const userId = requests[idx].userId;
-    const expiresAt = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const aIdx = accounts.findIndex((a: any) => a.id === userId);
-    if (aIdx >= 0) {
-      accounts[aIdx].subscription = { active: true, expiresAt, profileBg: accounts[aIdx].subscription?.profileBg || '' };
-      localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
+  const updateUser = useCallback(async (data: Partial<User>) => {
+    if (!user) return;
+    try {
+      const { user: u } = await api.auth.update(user.id, data);
+      setUser(u);
+    } catch (e: any) {
+      throw new Error(e.message);
     }
-    window.dispatchEvent(new Event('zynd_payments_updated'));
+  }, [user]);
+
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<string | true> => {
+    if (!user) return 'Не авторизован';
+    try {
+      await api.auth.changePassword(user.id, oldPassword, newPassword);
+      return true;
+    } catch (e: any) {
+      return e.message || 'Ошибка смены пароля';
+    }
+  }, [user]);
+
+  const getAllUsers = useCallback(async () => {
+    if (!user?.isAdmin) return [];
+    try {
+      const { users } = await api.auth.getAllUsers(user.id);
+      return users;
+    } catch { return []; }
+  }, [user]);
+
+  const getUserById = useCallback(async (id: string): Promise<User | null> => {
+    try {
+      const { user: u } = await api.auth.getUserById(id);
+      return u;
+    } catch { return null; }
   }, []);
 
-  const rejectPayment = useCallback((requestId: string) => {
-    const requests: PaymentRequest[] = JSON.parse(localStorage.getItem('zynd_payments') || '[]');
-    const idx = requests.findIndex(r => r.id === requestId);
-    if (idx < 0) return;
-    requests[idx].status = 'rejected';
-    localStorage.setItem('zynd_payments', JSON.stringify(requests));
-    window.dispatchEvent(new Event('zynd_payments_updated'));
-  }, []);
+  const adminUpdateUser = useCallback(async (userId: string, data: any) => {
+    if (!user?.isAdmin) return;
+    await api.auth.adminUpdate(user.id, userId, data);
+  }, [user]);
 
-  const rateUser = useCallback((userId: string, stars: number) => {
-    const accounts: any[] = JSON.parse(localStorage.getItem('zynd_accounts') || '[]');
-    const idx = accounts.findIndex((a: any) => a.id === userId);
-    if (idx < 0) return;
-    const prev = accounts[idx].rating || { count: 0, total: 0 };
-    accounts[idx].rating = { count: prev.count + 1, total: prev.total + stars };
-    localStorage.setItem('zynd_accounts', JSON.stringify(accounts));
+  const adminSetBlocked = useCallback(async (userId: string, blocked: boolean) => {
+    if (!user?.isAdmin) return;
+    await api.auth.block(user.id, userId, blocked);
+  }, [user]);
+
+  const adminDeleteUser = useCallback(async (userId: string) => {
+    if (!user?.isAdmin) return;
+    await api.auth.deleteUser(user.id, userId);
+  }, [user]);
+
+  const getPaymentRequests = useCallback(async (): Promise<PaymentRequest[]> => {
+    if (!user?.isAdmin) return [];
+    try {
+      const { payments } = await api.payments.list(user.id);
+      return payments;
+    } catch { return []; }
+  }, [user]);
+
+  const submitPaymentRequest = useCallback(async () => {
+    if (!user) return;
+    await api.payments.submit(user.id, user.username);
+  }, [user]);
+
+  const approvePayment = useCallback(async (requestId: string) => {
+    if (!user?.isAdmin) return;
+    await api.payments.approve(user.id, requestId);
+  }, [user]);
+
+  const rejectPayment = useCallback(async (requestId: string) => {
+    if (!user?.isAdmin) return;
+    await api.payments.reject(user.id, requestId);
+  }, [user]);
+
+  const rateUser = useCallback(async (
+    userId: string, stars: number, jobId: string, role: 'executor' | 'author',
+  ) => {
+    await api.auth.rate(userId, stars, jobId, role);
   }, []);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isAdmin: !!user?.isAdmin,
-        login,
-        register,
-        logout,
-        updateUser,
-        changePassword,
-        getAllUsers,
-        getUserById,
-        adminUpdateUser,
-        adminSetBlocked,
-        getPaymentRequests,
-        submitPaymentRequest,
-        approvePayment,
-        rejectPayment,
-        rateUser,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      isAuthenticated: !!user,
+      isAdmin: !!user?.isAdmin,
+      loading,
+      login,
+      register,
+      logout,
+      updateUser,
+      changePassword,
+      refreshUser,
+      getAllUsers,
+      getUserById,
+      adminUpdateUser,
+      adminSetBlocked,
+      adminDeleteUser,
+      getPaymentRequests,
+      submitPaymentRequest,
+      approvePayment,
+      rejectPayment,
+      rateUser,
+    }}>
       {children}
     </AuthContext.Provider>
   );

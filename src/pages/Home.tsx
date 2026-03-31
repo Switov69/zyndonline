@@ -5,18 +5,18 @@ import { JobCategory, CATEGORY_LABELS } from '../types';
 import JobCard from '../components/JobCard';
 
 export default function Home() {
-  const { jobs } = useJobs();
+  const { jobs, loading } = useJobs();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<JobCategory | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
 
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
+      if (j.status === 'done') return false; // hide completed
       const matchSearch =
         !search ||
         j.title.toLowerCase().includes(search.toLowerCase()) ||
-        j.description.toLowerCase().includes(search.toLowerCase()) ||
-        j.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
+        j.description.toLowerCase().includes(search.toLowerCase());
       const matchCategory = selectedCategory === 'all' || j.category === selectedCategory;
       return matchSearch && matchCategory;
     });
@@ -32,7 +32,7 @@ export default function Home() {
 
   return (
     <div>
-      {/* Hero Section */}
+      {/* Hero */}
       <div className="text-center mb-8 sm:mb-10">
         <div className="inline-flex items-center gap-2 bg-accent-500/10 text-accent-400 border border-accent-500/20 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
           <Briefcase size={15} />
@@ -53,13 +53,10 @@ export default function Home() {
       <div className="mb-6 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search
-              size={18}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-400"
-            />
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-400" />
             <input
               type="text"
-              placeholder="Поиск по названию, описанию или тегам..."
+              placeholder="Поиск по названию или описанию..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-dark-800/60 border border-dark-700/50 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-dark-400 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all"
@@ -97,16 +94,20 @@ export default function Home() {
         )}
       </div>
 
-      {/* Results count */}
       <div className="flex items-center justify-between mb-4">
         <p className="text-dark-400 text-sm">
           Найдено: <span className="text-dark-200">{filtered.length}</span> заказов
         </p>
       </div>
 
-      {/* Job Grid */}
-      {filtered.length > 0 ? (
+      {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-dark-800/40 border border-dark-700/30 rounded-2xl h-44 animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {filtered.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
@@ -117,9 +118,7 @@ export default function Home() {
             <Search size={28} className="text-dark-500" />
           </div>
           <h3 className="text-white font-semibold text-lg mb-2">Ничего не найдено</h3>
-          <p className="text-dark-400 text-sm">
-            Попробуйте изменить фильтры или поисковый запрос
-          </p>
+          <p className="text-dark-400 text-sm">Попробуйте изменить фильтры или поисковый запрос</p>
         </div>
       )}
     </div>
