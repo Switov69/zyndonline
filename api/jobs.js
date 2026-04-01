@@ -1,16 +1,16 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_db';
-import { handleOptions, formatJob } from './_utils';
+const { getDb } = require('./_db');
+const { handleOptions, formatJob } = require('./_utils');
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
   if (handleOptions(req, res)) return;
-  const sql = getDb();
-  const action = (req.query.action as string) || req.body?.action;
-  const id = req.query.id as string | undefined;
 
-  // ── GET /api/jobs — list all jobs sorted ─────────────────────────────────
+  const action = req.query.action || (req.body && req.body.action);
+  const id = req.query.id;
+
+  // ── GET list ──────────────────────────────────────────────────────────────
   if (req.method === 'GET' && !action && !id) {
     try {
+      const sql = getDb();
       const rows = await sql`
         SELECT j.*,
           (u.sub_active = true AND (u.sub_expires_at IS NULL OR u.sub_expires_at > NOW())) AS author_premium
@@ -19,12 +19,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ORDER BY COALESCE(j.premium_boosted_at, j.created_at) DESC
       `;
       return res.status(200).json({ jobs: rows.map(formatJob) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('jobs list error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── GET /api/jobs?id=xxx — get single job ─────────────────────────────────
+  // ── GET single ────────────────────────────────────────────────────────────
   if (req.method === 'GET' && id) {
     try {
+      const sql = getDb();
       const rows = await sql`
         SELECT j.*,
           (u.sub_active = true AND (u.sub_expires_at IS NULL OR u.sub_expires_at > NOW())) AS author_premium
@@ -33,14 +37,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
       if (!rows.length) return res.status(404).json({ error: 'Not found' });
       return res.status(200).json({ job: formatJob(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('job get error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/jobs — create job ───────────────────────────────────────────
+  // ── POST create ───────────────────────────────────────────────────────────
   if (req.method === 'POST' && !action) {
     try {
       const { title, description, category, budget, authorId, authorName, authorAvatar, authorTelegram, jobImage } = req.body || {};
       if (!title || !description || !budget || !authorId) return res.status(400).json({ error: 'Missing required fields' });
+      const sql = getDb();
       const authorRows = await sql`SELECT sub_active, sub_expires_at FROM users WHERE id = ${authorId} LIMIT 1`;
       const hasPremium = authorRows.length > 0 && authorRows[0].sub_active &&
         (!authorRows[0].sub_expires_at || new Date(authorRows[0].sub_expires_at) > new Date());
@@ -54,13 +62,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
       await sql`UPDATE users SET jobs_posted = jobs_posted + 1 WHERE id = ${authorId}`;
       return res.status(201).json({ job: formatJob({ ...rows[0], author_premium: hasPremium }) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('job create error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── PATCH /api/jobs?id=xxx — update job ───────────────────────────────────
+  // ── PATCH update ──────────────────────────────────────────────────────────
   if (req.method === 'PATCH' && id) {
     try {
       const { title, description, category, budget, jobImage, status, ratingForExecutor, ratingForAuthor, executorId, executorName } = req.body || {};
+      const sql = getDb();
       if (title !== undefined) await sql`UPDATE jobs SET title = ${title} WHERE id = ${id}`;
       if (description !== undefined) await sql`UPDATE jobs SET description = ${description} WHERE id = ${id}`;
       if (category !== undefined) await sql`UPDATE jobs SET category = ${category} WHERE id = ${id}`;
@@ -75,23 +87,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM jobs j LEFT JOIN users u ON j.author_id = u.id WHERE j.id = ${id} LIMIT 1
       `;
       return res.status(200).json({ job: formatJob(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('job update error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── DELETE /api/jobs?id=xxx ───────────────────────────────────────────────
+  // ── DELETE ────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE' && id) {
     try {
+      const sql = getDb();
       await sql`DELETE FROM jobs WHERE id = ${id}`;
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('job delete error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/jobs?action=take ────────────────────────────────────────────
+  // ── take ──────────────────────────────────────────────────────────────────
   if (action === 'take') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { jobId, userId, userName } = req.body || {};
       if (!jobId || !userId || !userName) return res.status(400).json({ error: 'Missing fields' });
+      const sql = getDb();
       const jobRows = await sql`SELECT * FROM jobs WHERE id = ${jobId} AND status = 'open' LIMIT 1`;
       if (!jobRows.length) return res.status(400).json({ error: 'Job not available' });
       const job = jobRows[0];
@@ -103,15 +123,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM jobs j LEFT JOIN users u ON j.author_id = u.id WHERE j.id = ${jobId} LIMIT 1
       `;
       return res.status(200).json({ job: formatJob(rows[0]), authorId: job.author_id });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('take error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/jobs?action=complete ────────────────────────────────────────
+  // ── complete ──────────────────────────────────────────────────────────────
   if (action === 'complete') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { jobId } = req.body || {};
       if (!jobId) return res.status(400).json({ error: 'Missing jobId' });
+      const sql = getDb();
       const jobRows = await sql`SELECT * FROM jobs WHERE id = ${jobId} LIMIT 1`;
       if (!jobRows.length) return res.status(404).json({ error: 'Job not found' });
       const job = jobRows[0];
@@ -122,23 +146,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM jobs j LEFT JOIN users u ON j.author_id = u.id WHERE j.id = ${jobId} LIMIT 1
       `;
       return res.status(200).json({ job: formatJob(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('complete error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/jobs?action=cancel ─────────────────────────────────────────
+  // ── cancel ────────────────────────────────────────────────────────────────
   if (action === 'cancel') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { jobId } = req.body || {};
       if (!jobId) return res.status(400).json({ error: 'Missing jobId' });
+      const sql = getDb();
       await sql`UPDATE jobs SET status = 'open', taken_by_id = NULL, taken_by_name = NULL WHERE id = ${jobId}`;
       const rows = await sql`
         SELECT j.*, (u.sub_active = true AND (u.sub_expires_at IS NULL OR u.sub_expires_at > NOW())) AS author_premium
         FROM jobs j LEFT JOIN users u ON j.author_id = u.id WHERE j.id = ${jobId} LIMIT 1
       `;
       return res.status(200).json({ job: formatJob(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('cancel error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
   return res.status(400).json({ error: 'Unknown request' });
-}
+};

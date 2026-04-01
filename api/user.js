@@ -1,43 +1,51 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_db';
-import { handleOptions, formatUser } from './_utils';
+const { getDb } = require('./_db');
+const { handleOptions, formatUser } = require('./_utils');
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
   if (handleOptions(req, res)) return;
-  const sql = getDb();
-  const action = (req.query.action as string) || req.body?.action;
 
-  // ── GET /api/user?action=me&userId=xxx ────────────────────────────────────
+  const action = req.query.action || (req.body && req.body.action);
+
+  // ── me ────────────────────────────────────────────────────────────────────
   if (action === 'me') {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
     try {
-      const userId = req.query.userId as string;
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      const userId = req.query.userId;
       if (!userId) return res.status(400).json({ error: 'Missing userId' });
+      const sql = getDb();
       const rows = await sql`SELECT * FROM users WHERE id = ${userId} LIMIT 1`;
       if (!rows.length) return res.status(404).json({ error: 'User not found' });
       return res.status(200).json({ user: formatUser(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('me error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── GET /api/user?action=all&adminId=xxx ──────────────────────────────────
+  // ── all (admin) ───────────────────────────────────────────────────────────
   if (action === 'all') {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
     try {
-      const adminId = req.query.adminId as string;
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      const adminId = req.query.adminId;
       if (!adminId) return res.status(403).json({ error: 'Forbidden' });
+      const sql = getDb();
       const adminCheck = await sql`SELECT is_admin FROM users WHERE id = ${adminId} LIMIT 1`;
       if (!adminCheck.length || !adminCheck[0].is_admin) return res.status(403).json({ error: 'Forbidden' });
       const rows = await sql`SELECT * FROM users ORDER BY joined_at DESC`;
-      return res.status(200).json({ users: rows.map((r: any) => ({ ...formatUser(r), password: r.password_hash })) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+      return res.status(200).json({ users: rows.map(r => ({ ...formatUser(r), password: r.password_hash })) });
+    } catch (e) {
+      console.error('all users error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── PATCH /api/user?action=update ─────────────────────────────────────────
+  // ── update ────────────────────────────────────────────────────────────────
   if (action === 'update') {
-    if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
       const { userId, username, telegram, avatar, subscription } = req.body || {};
       if (!userId) return res.status(400).json({ error: 'Missing userId' });
+      const sql = getDb();
       if (username !== undefined) {
         await sql`UPDATE users SET username = ${username} WHERE id = ${userId}`;
         await sql`UPDATE jobs SET author_name = ${username} WHERE author_id = ${userId}`;
@@ -63,31 +71,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const rows = await sql`SELECT * FROM users WHERE id = ${userId} LIMIT 1`;
       return res.status(200).json({ user: formatUser(rows[0]) });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('update error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/user?action=change-password ────────────────────────────────
+  // ── change-password ───────────────────────────────────────────────────────
   if (action === 'change-password') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { userId, oldPassword, newPassword } = req.body || {};
       if (!userId || !oldPassword || !newPassword) return res.status(400).json({ error: 'Missing fields' });
+      const sql = getDb();
       const rows = await sql`SELECT * FROM users WHERE id = ${userId} LIMIT 1`;
       if (!rows.length) return res.status(404).json({ error: 'User not found' });
       if (rows[0].password_hash !== oldPassword) return res.status(401).json({ error: 'Неверный текущий пароль' });
       if (oldPassword === newPassword) return res.status(400).json({ error: 'Новый пароль совпадает с текущим' });
       await sql`UPDATE users SET password_hash = ${newPassword} WHERE id = ${userId}`;
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('change-password error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/user?action=rate ────────────────────────────────────────────
+  // ── rate ──────────────────────────────────────────────────────────────────
   if (action === 'rate') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { targetUserId, stars, jobId, role } = req.body || {};
       if (!targetUserId || !stars || !jobId || !role) return res.status(400).json({ error: 'Missing fields' });
       if (stars < 1 || stars > 5) return res.status(400).json({ error: 'Stars must be 1-5' });
+      const sql = getDb();
       await sql`UPDATE users SET rating_count = rating_count + 1, rating_total = rating_total + ${stars} WHERE id = ${targetUserId}`;
       if (role === 'executor') {
         await sql`UPDATE jobs SET rating_for_executor = ${stars} WHERE id = ${jobId}`;
@@ -95,15 +111,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE jobs SET rating_for_author = ${stars} WHERE id = ${jobId}`;
       }
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('rate error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── POST /api/user?action=admin-update ────────────────────────────────────
+  // ── admin-update ──────────────────────────────────────────────────────────
   if (action === 'admin-update') {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { adminId, targetUserId, data, blocked } = req.body || {};
       if (!adminId || !targetUserId) return res.status(400).json({ error: 'Missing fields' });
+      const sql = getDb();
       const adminCheck = await sql`SELECT is_admin FROM users WHERE id = ${adminId} LIMIT 1`;
       if (!adminCheck.length || !adminCheck[0].is_admin) return res.status(403).json({ error: 'Forbidden' });
       if (data) {
@@ -127,15 +147,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE users SET blocked = ${blocked} WHERE id = ${targetUserId}`;
       }
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('admin-update error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
-  // ── DELETE /api/user?action=delete ────────────────────────────────────────
+  // ── delete ────────────────────────────────────────────────────────────────
   if (action === 'delete') {
-    if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
     try {
+      if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
       const { adminId, targetUserId } = req.body || {};
       if (!adminId || !targetUserId) return res.status(400).json({ error: 'Missing fields' });
+      const sql = getDb();
       const adminCheck = await sql`SELECT is_admin FROM users WHERE id = ${adminId} LIMIT 1`;
       if (!adminCheck.length || !adminCheck[0].is_admin) return res.status(403).json({ error: 'Forbidden' });
       const targetCheck = await sql`SELECT is_admin FROM users WHERE id = ${targetUserId} LIMIT 1`;
@@ -147,8 +171,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sql`DELETE FROM jobs WHERE author_id = ${targetUserId}`;
       await sql`DELETE FROM users WHERE id = ${targetUserId}`;
       return res.status(200).json({ ok: true });
-    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+    } catch (e) {
+      console.error('delete user error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
   }
 
   return res.status(400).json({ error: 'Unknown action' });
-}
+};

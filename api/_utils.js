@@ -1,18 +1,16 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-export function setCors(res: VercelResponse) {
+function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-export function handleOptions(req: VercelRequest, res: VercelResponse): boolean {
+function handleOptions(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
   return false;
 }
 
-export function formatUser(row: any) {
+function formatUser(row) {
   const subActive = !!row.sub_active && (!row.sub_expires_at || new Date(row.sub_expires_at) > new Date());
   return {
     id: String(row.id),
@@ -35,7 +33,7 @@ export function formatUser(row: any) {
   };
 }
 
-export function formatJob(row: any) {
+function formatJob(row) {
   return {
     id: String(row.id),
     title: row.title,
@@ -62,7 +60,7 @@ export function formatJob(row: any) {
   };
 }
 
-export function formatPayment(row: any) {
+function formatPayment(row) {
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -71,3 +69,5 @@ export function formatPayment(row: any) {
     status: row.status,
   };
 }
+
+module.exports = { handleOptions, formatUser, formatJob, formatPayment };
