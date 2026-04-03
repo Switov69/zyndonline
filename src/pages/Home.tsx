@@ -36,7 +36,7 @@ export default function Home() {
       <div className="text-center mb-8 sm:mb-10">
         <div className="inline-flex items-center gap-2 bg-accent-500/10 text-accent-400 border border-accent-500/20 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
           <Briefcase size={15} />
-          Minecraft КБ
+          Биржа труда КБ
         </div>
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-3 tracking-tight">
           Найди работу на{' '}
@@ -45,7 +45,7 @@ export default function Home() {
           </span>
         </h1>
         <p className="text-dark-300 text-base sm:text-lg max-w-xl mx-auto">
-          Ищи заказы, предлагай услуги и зарабатывай на любимом сервере
+          Ищи заказы, предлагай услуги и зарабатывай на КосмикБедрок
         </p>
       </div>
 
