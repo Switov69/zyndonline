@@ -30,7 +30,9 @@ module.exports = async function handler(req, res) {
       const { userId, username } = req.body || {};
       if (!userId || !username) return res.status(400).json({ error: 'Missing fields' });
       const sql = getDb();
-      const existing = await sql`SELECT id FROM payment_requests WHERE user_id = ${userId} AND status = 'pending' LIMIT 1`;
+      const existing = await sql`
+        SELECT id FROM payment_requests WHERE user_id = ${userId} AND status = 'pending' LIMIT 1
+      `;
       if (existing.length) return res.status(409).json({ error: 'Already pending' });
       const id = 'pay_' + Date.now();
       const rows = await sql`
@@ -56,9 +58,16 @@ module.exports = async function handler(req, res) {
       if (!adminCheck.length || !adminCheck[0].is_admin) return res.status(403).json({ error: 'Forbidden' });
       const reqRows = await sql`SELECT * FROM payment_requests WHERE id = ${requestId} LIMIT 1`;
       if (!reqRows.length) return res.status(404).json({ error: 'Request not found' });
+      const payReq = reqRows[0];
       const expiresAt = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
-      await sql`UPDATE users SET sub_active = true, sub_expires_at = ${expiresAt} WHERE id = ${reqRows[0].user_id}`;
+      await sql`UPDATE users SET sub_active = true, sub_expires_at = ${expiresAt} WHERE id = ${payReq.user_id}`;
       await sql`UPDATE payment_requests SET status = 'approved', resolved_at = NOW() WHERE id = ${requestId}`;
+      // Notify the user that their Premium was activated
+      const notifId = 'n_premium_' + Date.now();
+      await sql`
+        INSERT INTO notifications (id, for_user_id, text, read, created_at)
+        VALUES (${notifId}, ${payReq.user_id}, ${'🎉 Ваша подписка Premium активирована! Действует 3 недели.'}, false, NOW())
+      `;
       return res.status(200).json({ ok: true, expiresAt });
     } catch (e) {
       console.error('approve error:', e);

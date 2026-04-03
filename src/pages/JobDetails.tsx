@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Coins, Tag, User, CalendarDays, MessageCircle,
+  ArrowLeft, Coins, User, CalendarDays, MessageCircle,
   LogIn, Send, X, CheckCircle2, Edit3, Save, Image, Star, Crown,
 } from 'lucide-react';
 import { useJobs } from '../context/JobsContext';
@@ -9,7 +9,6 @@ import { useAuth } from '../context/AuthContext';
 import { CATEGORY_LABELS, CATEGORY_COLORS, JobCategory } from '../types';
 import { StarRating, StarPicker } from '../components/JobCard';
 
-// ── Image editor for premium job photo ───────────────────────────────────────
 function ImageEditor({ src, onSave, onCancel }: { src: string; onSave: (d: string) => void; onCancel: () => void }) {
   const [scale, setScale] = useState(1);
   const [ox, setOx] = useState(0);
@@ -28,7 +27,10 @@ function ImageEditor({ src, onSave, onCancel }: { src: string; onSave: (d: strin
     ctx.drawImage(img, (W - img.naturalWidth * s) / 2 + x, (H - img.naturalHeight * s) / 2 + y, img.naturalWidth * s, img.naturalHeight * s);
   };
 
-  const update = (s: number, x: number, y: number) => { setScale(s); setOx(x); setOy(y); requestAnimationFrame(() => draw(s, x, y)); };
+  const update = (s: number, x: number, y: number) => {
+    setScale(s); setOx(x); setOy(y);
+    requestAnimationFrame(() => draw(s, x, y));
+  };
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -38,8 +40,7 @@ function ImageEditor({ src, onSave, onCancel }: { src: string; onSave: (d: strin
           <button onClick={onCancel} className="text-dark-400 hover:text-white"><X size={20} /></button>
         </div>
         <p className="text-dark-500 text-xs mb-3">Рекомендуется 800×300 px. Перетащите для позиционирования.</p>
-        <div className="relative mb-4 rounded-xl overflow-hidden border border-dark-600/50 cursor-move"
-          style={{ aspectRatio: '800/300' }}
+        <div className="relative mb-4 rounded-xl overflow-hidden border border-dark-600/50 cursor-move" style={{ aspectRatio: '800/300' }}
           onMouseDown={(e) => { setDragging(true); setDragStart({ x: e.clientX - ox, y: e.clientY - oy }); }}
           onMouseMove={(e) => { if (dragging) update(scale, e.clientX - dragStart.x, e.clientY - dragStart.y); }}
           onMouseUp={() => setDragging(false)} onMouseLeave={() => setDragging(false)}>
@@ -47,16 +48,15 @@ function ImageEditor({ src, onSave, onCancel }: { src: string; onSave: (d: strin
           <img ref={imgRef} src={src} alt="" className="hidden" onLoad={() => draw(scale, ox, oy)} />
         </div>
         <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => update(Math.max(0.1, scale - 0.1), ox, oy)} className="p-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-200"><Star size={14} className="rotate-180" /></button>
-          <input type="range" min={0.1} max={4} step={0.05} value={scale} onChange={(e) => update(parseFloat(e.target.value), ox, oy)} className="flex-1 accent-accent-500" />
-          <button onClick={() => update(Math.min(4, scale + 0.1), ox, oy)} className="p-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-200"><Star size={14} /></button>
+          <input type="range" min={0.1} max={4} step={0.05} value={scale}
+            onChange={(e) => update(parseFloat(e.target.value), ox, oy)} className="flex-1 accent-accent-500" />
           <button onClick={() => update(1, 0, 0)} className="px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 text-xs">Сброс</button>
         </div>
         <div className="flex gap-3">
           <button onClick={onCancel} className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-xl text-sm font-medium transition-colors">Отмена</button>
           <button onClick={() => { draw(scale, ox, oy); onSave(canvasRef.current!.toDataURL('image/jpeg', 0.88)); }}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-sm font-medium transition-colors">
-            <Save size={14} /> Сохранить
+            <Save size={14} />Сохранить
           </button>
         </div>
       </div>
@@ -86,16 +86,15 @@ export default function JobDetails() {
 
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
+  // ratingStars starts at 0 = no stars selected
   const [ratingModal, setRatingModal] = useState<{ targetUserId: string; targetName: string; role: 'executor' | 'author' } | null>(null);
-  const [ratingStars, setRatingStars] = useState(5);
+  const [ratingStars, setRatingStars] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const [authorInfo, setAuthorInfo] = useState<any>(null);
   useEffect(() => {
-    if (job?.authorId) {
-      getUserById(job.authorId).then(u => setAuthorInfo(u));
-    }
-  }, [job?.authorId, getUserById]);
+    if (job?.authorId) getUserById(job.authorId).then(u => setAuthorInfo(u));
+  }, [job?.authorId]);
 
   if (!job) {
     return (
@@ -135,16 +134,15 @@ export default function JobDetails() {
     setShowCompleteConfirm(false);
   };
 
+  // ── FIX: no navigate on decline — just close modal ───────────────────────
   const handleDeclineJob = async () => {
     await cancelJobTake(job.id);
     setShowDeclineConfirm(false);
-    navigate('/profile');
   };
 
   const handleRateSubmit = async () => {
-    if (!ratingModal) return;
+    if (!ratingModal || ratingStars === 0) return;
     await rateUser(ratingModal.targetUserId, ratingStars, job.id, ratingModal.role);
-    // Also update job so rating fields are set
     if (ratingModal.role === 'executor') await updateJob(job.id, { ratingForExecutor: ratingStars });
     else await updateJob(job.id, { ratingForAuthor: ratingStars });
     setRatingModal(null);
@@ -186,6 +184,10 @@ export default function JobDetails() {
     e.target.value = '';
   };
 
+  // ── Username-based profile links ─────────────────────────────────────────
+  const authorLink = `/user/${encodeURIComponent(job.authorName)}`;
+  const executorLink = job.takenByName ? `/user/${encodeURIComponent(job.takenByName)}` : '#';
+
   return (
     <div className="max-w-3xl mx-auto">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-dark-300 hover:text-white text-sm mb-6 transition-colors">
@@ -197,7 +199,6 @@ export default function JobDetails() {
       )}
 
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
-        {/* Premium image banner */}
         {job.jobImage && !editing && (
           <div className="w-full h-40 overflow-hidden">
             <img src={job.jobImage} alt="" className="w-full h-full object-cover" />
@@ -237,7 +238,8 @@ export default function JobDetails() {
                 <div>
                   <label className="block text-dark-200 text-sm font-medium mb-2">Бюджет</label>
                   <div className="flex gap-2">
-                    <input type="text" value={editBudget} onFocus={() => { if (editBudget === 'Договорная') setEditBudget(''); }} onChange={(e) => handleBudgetInput(e.target.value)} placeholder="0.00" inputMode="decimal"
+                    <input type="text" value={editBudget} onFocus={() => { if (editBudget === 'Договорная') setEditBudget(''); }}
+                      onChange={(e) => handleBudgetInput(e.target.value)} placeholder="0.00" inputMode="decimal"
                       className="min-w-0 flex-1 bg-dark-900/50 border border-dark-600/50 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-accent-500/50 transition-all" />
                     <button type="button" onClick={() => setEditBudget('Договорная')}
                       className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-colors border whitespace-nowrap ${editBudget === 'Договорная' ? 'bg-accent-500/20 border-accent-500/40 text-accent-400' : 'bg-dark-700 hover:bg-dark-600 text-dark-200 border-dark-600/50'}`}>
@@ -246,8 +248,6 @@ export default function JobDetails() {
                   </div>
                 </div>
               </div>
-
-              {/* Premium image upload in edit */}
               {hasPremium && (
                 <div>
                   <label className="block text-dark-200 text-sm font-medium mb-2 flex items-center gap-2">
@@ -258,10 +258,8 @@ export default function JobDetails() {
                     <div className="relative">
                       <img src={editImage} alt="" className="w-full h-24 object-cover rounded-xl border border-dark-600/50" />
                       <div className="absolute top-2 right-2 flex gap-1.5">
-                        <button type="button" onClick={() => { setEditImageRaw(editImage); setShowImgEditor(true); }}
-                          className="bg-dark-900/80 text-dark-200 hover:text-accent-400 rounded-lg p-1.5 transition-colors"><Image size={12} /></button>
-                        <button type="button" onClick={() => setEditImage(undefined)}
-                          className="bg-dark-900/80 text-dark-200 hover:text-red-400 rounded-lg p-1.5 transition-colors"><X size={12} /></button>
+                        <button type="button" onClick={() => { setEditImageRaw(editImage); setShowImgEditor(true); }} className="bg-dark-900/80 text-dark-200 hover:text-accent-400 rounded-lg p-1.5 transition-colors"><Image size={12} /></button>
+                        <button type="button" onClick={() => setEditImage(undefined)} className="bg-dark-900/80 text-dark-200 hover:text-red-400 rounded-lg p-1.5 transition-colors"><X size={12} /></button>
                       </div>
                     </div>
                   ) : (
@@ -273,7 +271,6 @@ export default function JobDetails() {
                   )}
                 </div>
               )}
-
               <div className="flex gap-3 pt-2">
                 <button onClick={saveEdit} className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-sm font-medium transition-colors">
                   <Save size={15} />Сохранить
@@ -285,7 +282,6 @@ export default function JobDetails() {
             </div>
           ) : (
             <>
-              {/* Badges */}
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium border ${CATEGORY_COLORS[job.category]}`}>
                   {CATEGORY_LABELS[job.category]}
@@ -304,7 +300,6 @@ export default function JobDetails() {
 
               <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6 break-words">{job.title}</h1>
 
-              {/* Info grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
                 <div className="bg-dark-700/30 rounded-xl p-3 sm:p-4">
                   <div className="flex items-center gap-1.5 text-dark-400 text-xs mb-1"><Coins size={13} />Бюджет</div>
@@ -316,42 +311,37 @@ export default function JobDetails() {
                 </div>
                 <div className="bg-dark-700/30 rounded-xl p-3 sm:p-4">
                   <div className="flex items-center gap-1.5 text-dark-400 text-xs mb-1"><User size={13} />Автор</div>
-                  <Link to={`/user/${job.authorId}`} className="text-accent-400 hover:text-accent-300 font-semibold text-sm transition-colors">
+                  <Link to={authorLink} className="text-accent-400 hover:text-accent-300 font-semibold text-sm transition-colors">
                     {job.authorName}
                   </Link>
                 </div>
               </div>
 
-              {/* Description */}
               <div className="mb-6">
                 <h2 className="text-white font-semibold text-lg mb-3">Описание</h2>
                 <p className="text-dark-200 leading-relaxed whitespace-pre-wrap break-words">{job.description}</p>
               </div>
 
-              {/* Executor — only for author and admin */}
               {job.takenByName && (isOwnJob || isAdmin) && (
                 <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
                   <p className="text-amber-400 text-sm">
                     Взят исполнителем:{' '}
-                    <Link to={`/user/${job.takenById}`} className="font-semibold hover:text-amber-300 transition-colors">
-                      {job.takenByName}
-                    </Link>
+                    <Link to={executorLink} className="font-semibold hover:text-amber-300 transition-colors">{job.takenByName}</Link>
                   </p>
                 </div>
               )}
 
-              {/* Done — rating */}
               {job.status === 'done' && (
                 <div className="mb-6 bg-dark-700/30 border border-dark-600/30 rounded-xl p-4 space-y-3">
                   <p className="text-dark-300 text-sm font-semibold">Заказ завершён</p>
                   {isOwnJob && job.executorId && !job.ratingForExecutor && (
-                    <button onClick={() => { setRatingModal({ targetUserId: job.executorId!, targetName: job.executorName || 'Исполнитель', role: 'executor' }); setRatingStars(5); }}
+                    <button onClick={() => { setRatingModal({ targetUserId: job.executorId!, targetName: job.executorName || 'Исполнитель', role: 'executor' }); setRatingStars(0); }}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-xl text-sm font-medium hover:bg-amber-500/25 transition-colors">
                       <Star size={13} />Оценить исполнителя
                     </button>
                   )}
                   {isExecutor && !job.ratingForAuthor && (
-                    <button onClick={() => { setRatingModal({ targetUserId: job.authorId, targetName: job.authorName, role: 'author' }); setRatingStars(5); }}
+                    <button onClick={() => { setRatingModal({ targetUserId: job.authorId, targetName: job.authorName, role: 'author' }); setRatingStars(0); }}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-xl text-sm font-medium hover:bg-amber-500/25 transition-colors">
                       <Star size={13} />Оценить заказчика
                     </button>
@@ -359,24 +349,22 @@ export default function JobDetails() {
                 </div>
               )}
 
-              {/* Author card */}
               <div className="border-t border-dark-700/50 pt-6">
                 <div className="flex items-center gap-4 flex-wrap">
-                  <Link to={`/user/${job.authorId}`}>
+                  <Link to={authorLink}>
                     <div className="w-12 h-12 rounded-xl bg-dark-600 flex items-center justify-center text-dark-200 text-lg font-bold overflow-hidden hover:opacity-80 transition-opacity">
                       {job.authorAvatar ? <img src={job.authorAvatar} alt="" className="w-full h-full object-cover" /> : job.authorName.charAt(0)}
                     </div>
                   </Link>
                   <div>
                     <div className="flex items-center gap-2">
-                      <Link to={`/user/${job.authorId}`} className="text-white font-semibold hover:text-accent-300 transition-colors">{job.authorName}</Link>
+                      <Link to={authorLink} className="text-white font-semibold hover:text-accent-300 transition-colors">{job.authorName}</Link>
                       {hasPremium && <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded text-xs"><Crown size={9} />Premium</span>}
                     </div>
                     <p className="text-dark-400 text-sm">Заказчик</p>
                     {authorInfo?.rating && <StarRating rating={authorInfo.rating} />}
                   </div>
 
-                  {/* Action buttons */}
                   {isAuthenticated && job.status === 'open' && !isOwnJob && !user?.blocked && (
                     <button onClick={() => setShowConfirm(true)}
                       className="ml-auto inline-flex items-center gap-2 px-5 py-2.5 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-accent-500/20">
@@ -413,7 +401,7 @@ export default function JobDetails() {
         </div>
       </div>
 
-      {/* Take job confirm */}
+      {/* Take confirm */}
       {showConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm(false)}>
           <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -421,7 +409,7 @@ export default function JobDetails() {
               <h3 className="text-white font-semibold text-lg">Взяться за заказ?</h3>
               <button onClick={() => setShowConfirm(false)} className="text-dark-400 hover:text-white"><X size={20} /></button>
             </div>
-            <p className="text-dark-300 text-sm mb-2">Вы уверены, что хотите взяться за заказ <span className="text-white font-medium">«{job.title}»</span>?</p>
+            <p className="text-dark-300 text-sm mb-2">Вы уверены, что хотите взяться за <span className="text-white font-medium">«{job.title}»</span>?</p>
             <p className="text-dark-300 text-sm mb-6">Бюджет: <span className="text-accent-400 font-medium">{job.budget}</span></p>
             <div className="flex gap-3">
               <button onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-xl text-sm font-medium transition-colors">Отмена</button>
@@ -455,7 +443,7 @@ export default function JobDetails() {
         </div>
       )}
 
-      {/* Author complete confirm */}
+      {/* Complete confirm */}
       {showCompleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowCompleteConfirm(false)}>
           <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -472,7 +460,7 @@ export default function JobDetails() {
         </div>
       )}
 
-      {/* Executor decline confirm */}
+      {/* Decline confirm */}
       {showDeclineConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeclineConfirm(false)}>
           <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -489,7 +477,7 @@ export default function JobDetails() {
         </div>
       )}
 
-      {/* Rating modal */}
+      {/* Rating modal — initial ratingStars=0 */}
       {ratingModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setRatingModal(null)}>
           <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -498,10 +486,14 @@ export default function JobDetails() {
               <button onClick={() => setRatingModal(null)} className="text-dark-400 hover:text-white"><X size={20} /></button>
             </div>
             <p className="text-dark-400 text-sm mb-5">Как оцените работу пользователя?</p>
-            <div className="flex justify-center mb-6"><StarPicker value={ratingStars} onChange={setRatingStars} /></div>
+            <div className="flex justify-center mb-6">
+              <StarPicker value={ratingStars} onChange={setRatingStars} />
+            </div>
+            {ratingStars === 0 && <p className="text-dark-500 text-xs text-center mb-4">Выберите оценку</p>}
             <div className="flex gap-3">
               <button onClick={() => setRatingModal(null)} className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-xl text-sm font-medium transition-colors">Отмена</button>
-              <button onClick={handleRateSubmit} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors">
+              <button onClick={handleRateSubmit} disabled={ratingStars === 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
                 <Star size={14} />Отправить
               </button>
             </div>

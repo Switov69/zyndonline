@@ -24,28 +24,28 @@ export default function Navbar() {
         : 'text-dark-200 hover:text-white hover:bg-dark-700/50'
     }`;
 
-  const hasPremium = user?.subscription?.active &&
+  const hasPremium = !!(
+    user?.subscription?.active &&
     user.subscription.expiresAt &&
-    new Date(user.subscription.expiresAt) > new Date();
+    new Date(user.subscription.expiresAt) > new Date()
+  );
 
   return (
     <nav
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-transparent backdrop-blur-none border-b border-transparent'
-          : 'bg-dark-900/80 backdrop-blur-xl border-b border-dark-700/50'
-      }`}
+      className={`sticky top-0 z-50 transition-all duration-300
+        bg-dark-900/95 backdrop-blur-xl border-b border-dark-700/50
+        ${scrolled ? 'md:bg-transparent md:backdrop-blur-none md:border-transparent' : ''}
+      `}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
+
         {/* ── Desktop ── */}
         <div className="hidden md:flex items-center h-16 relative">
 
           {/* Logo — absolute left, slides out on scroll */}
-          <div
-            className={`absolute left-0 transition-all duration-500 ease-in-out ${
-              scrolled ? 'opacity-0 pointer-events-none -translate-x-4' : 'opacity-100 translate-x-0'
-            }`}
-          >
+          <div className={`absolute left-0 transition-all duration-500 ease-in-out ${
+            scrolled ? 'opacity-0 pointer-events-none -translate-x-4' : 'opacity-100 translate-x-0'
+          }`}>
             <Link
               to="/"
               className="flex items-center gap-1.5 bg-dark-800/90 border border-dark-700/50 rounded-xl px-4 py-2 hover:border-dark-600 transition-colors backdrop-blur-sm whitespace-nowrap"
@@ -70,19 +70,16 @@ export default function Navbar() {
               </div>
 
               <Link to="/" className={linkClass('/')}>
-                <Home size={17} />
-                <span>Главная</span>
+                <Home size={17} /><span>Главная</span>
               </Link>
               {isAuthenticated && (
                 <Link to="/create" className={linkClass('/create')}>
-                  <PlusCircle size={17} />
-                  <span>Создать</span>
+                  <PlusCircle size={17} /><span>Создать</span>
                 </Link>
               )}
               {isAdmin && (
                 <Link to="/admin" className={linkClass('/admin')}>
-                  <Shield size={17} />
-                  <span>Админ</span>
+                  <Shield size={17} /><span>Админ</span>
                 </Link>
               )}
 
@@ -107,11 +104,9 @@ export default function Navbar() {
 
           {/* Avatar — absolute right, slides out on scroll */}
           {isAuthenticated && (
-            <div
-              className={`absolute right-0 transition-all duration-500 ease-in-out ${
-                scrolled ? 'opacity-0 pointer-events-none translate-x-4' : 'opacity-100 translate-x-0'
-              }`}
-            >
+            <div className={`absolute right-0 transition-all duration-500 ease-in-out ${
+              scrolled ? 'opacity-0 pointer-events-none translate-x-4' : 'opacity-100 translate-x-0'
+            }`}>
               <Link
                 to="/profile"
                 className="flex items-center gap-2.5 bg-dark-800/90 border border-dark-700/50 rounded-xl px-4 py-2 hover:border-dark-600 transition-colors backdrop-blur-sm whitespace-nowrap"
@@ -128,27 +123,41 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* ── Mobile ── */}
-        <div className="md:hidden flex items-center justify-between h-16">
+        {/* ── Mobile — solid background ALWAYS (no transparency even on scroll) ── */}
+        <div className="md:hidden flex items-center justify-between h-14">
           <Link to="/" className="flex items-center gap-1.5">
             <span className="text-lg font-bold text-white tracking-tight">Zynd</span>
             <span className="text-sm text-accent-400 font-medium">.online</span>
           </Link>
 
           {isAuthenticated && (
-            <button
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="p-2 rounded-xl text-dark-200 hover:text-white hover:bg-dark-700 transition-colors bg-dark-800/90 border border-dark-700/50 backdrop-blur-sm"
-            >
-              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 bg-dark-800/90 border border-dark-700/50 rounded-xl px-3 py-1.5"
+              >
+                <div className="w-6 h-6 rounded-full bg-accent-500/20 border border-accent-500/30 flex items-center justify-center text-accent-400 text-xs font-bold overflow-hidden">
+                  {user?.avatar
+                    ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                    : user?.username?.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm text-dark-200 max-w-[100px] truncate">{user?.username}</span>
+                {hasPremium && <Crown size={10} className="text-purple-400" />}
+              </Link>
+              <button
+                onClick={() => setMobileOpen(!mobileOpen)}
+                className="p-2 rounded-xl text-dark-200 hover:text-white hover:bg-dark-700 transition-colors bg-dark-800/90 border border-dark-700/50"
+              >
+                {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       {/* Mobile dropdown */}
       {mobileOpen && isAuthenticated && (
-        <div className="md:hidden bg-dark-900/95 backdrop-blur-xl px-4 py-3 flex flex-col gap-1 border-t border-dark-700/50">
+        <div className="md:hidden bg-dark-900 border-t border-dark-700/50 px-4 py-3 flex flex-col gap-1">
           <Link to="/" className={linkClass('/')} onClick={() => setMobileOpen(false)}>
             <Home size={17} /><span>Главная</span>
           </Link>
@@ -160,15 +169,6 @@ export default function Navbar() {
               <Shield size={17} /><span>Админ-панель</span>
             </Link>
           )}
-          <Link to="/profile" className={linkClass('/profile')} onClick={() => setMobileOpen(false)}>
-            <div className="w-6 h-6 rounded-full bg-accent-500/20 border border-accent-500/30 flex items-center justify-center text-accent-400 text-xs font-bold overflow-hidden">
-              {user?.avatar
-                ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
-                : user?.username?.charAt(0).toUpperCase()}
-            </div>
-            <span>{user?.username}</span>
-            {hasPremium && <Crown size={12} className="text-purple-400" />}
-          </Link>
         </div>
       )}
     </nav>

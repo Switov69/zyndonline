@@ -17,6 +17,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   getAllUsers: () => Promise<(User & { password: string })[]>;
   getUserById: (id: string) => Promise<User | null>;
+  getUserByUsername: (username: string) => Promise<User | null>;
   adminUpdateUser: (userId: string, data: any) => Promise<void>;
   adminSetBlocked: (userId: string, blocked: boolean) => Promise<void>;
   adminDeleteUser: (userId: string) => Promise<void>;
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('zynd_last_notif_ts');
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -96,6 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getUserById = useCallback(async (id: string): Promise<User | null> => {
     try { const { user: u } = await api.user.me(id); return u; }
+    catch { return null; }
+  }, []);
+
+  const getUserByUsername = useCallback(async (username: string): Promise<User | null> => {
+    try { const { user: u } = await api.user.getByUsername(username); return u; }
     catch { return null; }
   }, []);
 
@@ -135,15 +142,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.payments.reject(user.id, requestId);
   }, [user]);
 
+  // Pass current user's name as raterName so the rated user knows who rated them
   const rateUser = useCallback(async (userId: string, stars: number, jobId: string, role: 'executor' | 'author') => {
-    await api.user.rate(userId, stars, jobId, role);
-  }, []);
+    await api.user.rate(userId, stars, jobId, role, user?.username || '');
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{
       user, isAuthenticated: !!user, isAdmin: !!user?.isAdmin, loading,
       login, register, logout, updateUser, changePassword, refreshUser,
-      getAllUsers, getUserById, adminUpdateUser, adminSetBlocked, adminDeleteUser,
+      getAllUsers, getUserById, getUserByUsername,
+      adminUpdateUser, adminSetBlocked, adminDeleteUser,
       getPaymentRequests, submitPaymentRequest, approvePayment, rejectPayment, rateUser,
     }}>
       {children}

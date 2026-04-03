@@ -10,8 +10,14 @@ import Profile from './pages/Profile';
 import JobDetails from './pages/JobDetails';
 import Admin from './pages/Admin';
 import UserProfile from './pages/UserProfile';
+import { useNotifications } from './hooks/useNotifications';
 
-// Guard: if not authenticated, redirect to /login (except /login and /register)
+// Polls for new notifications and fires browser push notifications
+function NotificationPoller() {
+  useNotifications();
+  return null;
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
@@ -28,7 +34,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated && !publicPaths.includes(location.pathname)) {
     return <Navigate to="/login" replace />;
   }
-
   return <>{children}</>;
 }
 
@@ -41,13 +46,14 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <AuthGuard>
+      <NotificationPoller />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/job/:id" element={<JobDetails />} />
-          <Route path="/user/:id" element={<UserProfile />} />
+          <Route path="/user/:username" element={<UserProfile />} />
           <Route path="/create" element={<CreateJob />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

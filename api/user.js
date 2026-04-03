@@ -22,6 +22,22 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  // ── by-username ───────────────────────────────────────────────────────────
+  if (action === 'by-username') {
+    try {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      const username = req.query.username;
+      if (!username) return res.status(400).json({ error: 'Missing username' });
+      const sql = getDb();
+      const rows = await sql`SELECT * FROM users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+      if (!rows.length) return res.status(404).json({ error: 'User not found' });
+      return res.status(200).json({ user: formatUser(rows[0]) });
+    } catch (e) {
+      console.error('by-username error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
+  }
+
   // ── all (admin) ───────────────────────────────────────────────────────────
   if (action === 'all') {
     try {
@@ -35,6 +51,33 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ users: rows.map(r => ({ ...formatUser(r), password: r.password_hash })) });
     } catch (e) {
       console.error('all users error:', e);
+      return res.status(500).json({ error: e.message || 'Server error' });
+    }
+  }
+
+  // ── notifications ─────────────────────────────────────────────────────────
+  if (action === 'notifications') {
+    try {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      const userId = req.query.userId;
+      const since = req.query.since || '1970-01-01T00:00:00.000Z';
+      if (!userId) return res.status(400).json({ error: 'Missing userId' });
+      const sql = getDb();
+      const rows = await sql`
+        SELECT * FROM notifications
+        WHERE for_user_id = ${userId}
+          AND read = false
+          AND created_at > ${since}
+        ORDER BY created_at DESC
+        LIMIT 20
+      `;
+      // Mark as read
+      if (rows.length > 0) {
+        await sql`UPDATE notifications SET read = true WHERE for_user_id = ${userId} AND read = false AND created_at > ${since}`;
+      }
+      return res.status(200).json({ notifications: rows });
+    } catch (e) {
+      console.error('notifications error:', e);
       return res.status(500).json({ error: e.message || 'Server error' });
     }
   }
@@ -96,11 +139,11 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // ── rate ──────────────────────────────────────────────────────────────────
+  // ── rate — also stores notification for the rated user ───────────────────
   if (action === 'rate') {
     try {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-      const { targetUserId, stars, jobId, role } = req.body || {};
+      const { targetUserId, stars, jobId, role, raterName } = req.body || {};
       if (!targetUserId || !stars || !jobId || !role) return res.status(400).json({ error: 'Missing fields' });
       if (stars < 1 || stars > 5) return res.status(400).json({ error: 'Stars must be 1-5' });
       const sql = getDb();
@@ -110,6 +153,12 @@ module.exports = async function handler(req, res) {
       } else {
         await sql`UPDATE jobs SET rating_for_author = ${stars} WHERE id = ${jobId}`;
       }
+      // Notify the rated user
+      const who = raterName || (role === 'author' ? 'Исполнитель' : 'Заказчик');
+      const notifText = `${who} оставил вам оценку ${stars}⭐`;
+      const notifId = 'n_' + Date.now() + '_r';
+      await sql`INSERT INTO notifications (id, for_user_id, text, read, created_at)
+        VALUES (${notifId}, ${targetUserId}, ${notifText}, false, NOW())`;
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error('rate error:', e);

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Eye, EyeOff, Bell, BellOff } from 'lucide-react';
+import { UserPlus, Eye, EyeOff, Bell, BellOff, Smartphone, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
@@ -13,12 +13,29 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Popups flow: pwa → notifications → done
+  const [showPwaPopup, setShowPwaPopup] = useState(false);
   const [showNotifPopup, setShowNotifPopup] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [pwaInstalling, setPwaInstalling] = useState(false);
+
+  // Capture PWA install event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!username.trim() || !password.trim() || !confirmPassword.trim() || !telegram.trim()) { setError('Заполните все поля'); return; }
+    if (!username.trim() || !password.trim() || !confirmPassword.trim() || !telegram.trim()) {
+      setError('Заполните все поля'); return;
+    }
     if (username.trim().length < 3) { setError('Никнейм не менее 3 символов'); return; }
     if (!telegram.trim().startsWith('@')) { setError('Telegram должен начинаться с @'); return; }
     if (password.length < 4) { setError('Пароль не менее 4 символов'); return; }
@@ -26,14 +43,48 @@ export default function Register() {
     setLoading(true);
     const result = await register(username.trim(), password, telegram.trim());
     setLoading(false);
-    if (result === true) { setShowNotifPopup(true); } else { setError(result as string); }
+    if (result === true) {
+      // Start the post-registration flow
+      if (deferredPrompt) {
+        setShowPwaPopup(true);
+      } else {
+        setShowNotifPopup(true);
+      }
+    } else {
+      setError(result as string);
+    }
+  };
+
+  const handlePwaInstall = async () => {
+    if (!deferredPrompt) return;
+    setPwaInstalling(true);
+    try {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } catch { /* ignore */ }
+    setDeferredPrompt(null);
+    setPwaInstalling(false);
+    setShowPwaPopup(false);
+    setShowNotifPopup(true);
+  };
+
+  const handleSkipPwa = () => {
+    setShowPwaPopup(false);
+    setShowNotifPopup(true);
   };
 
   const handleEnableNotifs = async () => {
     if ('Notification' in window) {
       const perm = await Notification.requestPermission();
-      if (perm === 'granted') new Notification('Zynd.online', { body: 'Уведомления включены!', icon: '/favicon.ico' });
+      if (perm === 'granted') {
+        new Notification('Zynd.online', { body: 'Уведомления включены!', icon: '/favicon.ico' });
+      }
     }
+    setShowNotifPopup(false);
+    navigate('/');
+  };
+
+  const handleSkipNotifs = () => {
     setShowNotifPopup(false);
     navigate('/');
   };
@@ -48,24 +99,27 @@ export default function Register() {
           <h1 className="text-2xl font-bold text-white mb-2">Регистрация</h1>
           <p className="text-dark-400 text-sm">Создайте аккаунт, чтобы начать работать</p>
         </div>
+
         <form onSubmit={handleSubmit} className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6 sm:p-8 space-y-5">
-          {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl px-4 py-3 text-sm">{error}</div>}
-          {[
-            { label: 'Никнейм', val: username, set: setUsername, type: 'text', ph: 'Придумайте никнейм' },
-            { label: 'Telegram', val: telegram, set: setTelegram, type: 'text', ph: '@username' },
-          ].map(({ label, val, set, type, ph }) => (
-            <div key={label}>
-              <label className="block text-dark-200 text-sm font-medium mb-2">{label}</label>
-              <input type={type} value={val} onChange={(e) => set(e.target.value)} placeholder={ph}
-                className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
-            </div>
-          ))}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl px-4 py-3 text-sm">{error}</div>
+          )}
+          <div>
+            <label className="block text-dark-200 text-sm font-medium mb-2">Никнейм</label>
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Придумайте никнейм"
+              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
+          </div>
+          <div>
+            <label className="block text-dark-200 text-sm font-medium mb-2">Telegram</label>
+            <input type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username"
+              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
+          </div>
           <div>
             <label className="block text-dark-200 text-sm font-medium mb-2">Пароль</label>
             <div className="relative">
               <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Придумайте пароль"
                 className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 pr-11 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200">
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition-colors">
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
@@ -85,19 +139,71 @@ export default function Register() {
           </p>
         </form>
       </div>
-      {showNotifPopup && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-dark-800 border border-dark-700/50 rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
-            <div className="w-14 h-14 rounded-2xl bg-accent-500/15 flex items-center justify-center mx-auto mb-4">
-              <Bell size={26} className="text-accent-400" />
+
+      {/* ── PWA Install Popup ── */}
+      {showPwaPopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          {/* Glassmorphism backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
+          <div className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
+            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+            <button onClick={handleSkipPwa} className="absolute top-4 right-4 text-white/40 hover:text-white/80 transition-colors">
+              <X size={18} />
+            </button>
+            <div className="flex justify-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center shadow-lg shadow-accent-500/30">
+                <Smartphone size={28} className="text-white" />
+              </div>
             </div>
-            <h3 className="text-white font-bold text-lg mb-2">Добро пожаловать!</h3>
-            <p className="text-dark-300 text-sm mb-6 leading-relaxed">Включите уведомления, чтобы узнавать когда кто-то берёт ваш заказ.</p>
+            <h3 className="text-white font-bold text-xl text-center mb-2">Добавить на экран</h3>
+            <p className="text-white/60 text-sm text-center mb-6 leading-relaxed">
+              Добавьте Zynd.online на главный экран для быстрого доступа без браузера
+            </p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleEnableNotifs} className="w-full flex items-center justify-center gap-2 py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-sm font-medium transition-colors">
+              <button
+                onClick={handlePwaInstall}
+                disabled={pwaInstalling}
+                className="w-full py-3 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-400 hover:to-accent-500 disabled:opacity-60 text-white rounded-2xl text-sm font-semibold transition-all shadow-lg shadow-accent-500/25"
+              >
+                {pwaInstalling ? 'Устанавливаем...' : 'Добавить на главный экран'}
+              </button>
+              <button
+                onClick={handleSkipPwa}
+                className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white/70 hover:text-white rounded-2xl text-sm font-medium transition-all border border-white/10"
+              >
+                Пропустить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notifications Popup ── */}
+      {showNotifPopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
+          <div className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
+            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+            <div className="flex justify-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-accent-500/20 border border-accent-500/30 flex items-center justify-center">
+                <Bell size={28} className="text-accent-400" />
+              </div>
+            </div>
+            <h3 className="text-white font-bold text-xl text-center mb-2">Добро пожаловать!</h3>
+            <p className="text-white/60 text-sm text-center mb-6 leading-relaxed">
+              Включите уведомления, чтобы узнавать когда кто-то берёт ваш заказ или оставляет оценку
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleEnableNotifs}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-400 hover:to-accent-500 text-white rounded-2xl text-sm font-semibold transition-all shadow-lg shadow-accent-500/25"
+              >
                 <Bell size={16} /> Включить уведомления
               </button>
-              <button onClick={() => { setShowNotifPopup(false); navigate('/'); }} className="w-full flex items-center justify-center gap-2 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-300 rounded-xl text-sm font-medium transition-colors">
+              <button
+                onClick={handleSkipNotifs}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/10 hover:bg-white/15 text-white/70 hover:text-white rounded-2xl text-sm font-medium transition-all border border-white/10"
+              >
                 <BellOff size={16} /> Пропустить
               </button>
             </div>

@@ -13,7 +13,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // ── Auth (login, register) ────────────────────────────────────────────────
+  // ── Auth ─────────────────────────────────────────────────────────────────
   auth: {
     login: (username: string, password: string) =>
       req<{ user: User }>('/auth?action=login', {
@@ -28,10 +28,13 @@ export const api = {
       }),
   },
 
-  // ── User ──────────────────────────────────────────────────────────────────
+  // ── User ─────────────────────────────────────────────────────────────────
   user: {
     me: (userId: string) =>
       req<{ user: User }>(`/user?action=me&userId=${userId}`),
+
+    getByUsername: (username: string) =>
+      req<{ user: User }>(`/user?action=by-username&username=${encodeURIComponent(username)}`),
 
     getAllUsers: (adminId: string) =>
       req<{ users: (User & { password: string })[] }>(`/user?action=all&adminId=${adminId}`),
@@ -48,10 +51,10 @@ export const api = {
         body: JSON.stringify({ userId, oldPassword, newPassword }),
       }),
 
-    rate: (targetUserId: string, stars: number, jobId: string, role: 'executor' | 'author') =>
+    rate: (targetUserId: string, stars: number, jobId: string, role: 'executor' | 'author', raterName: string) =>
       req<{ ok: boolean }>('/user?action=rate', {
         method: 'POST',
-        body: JSON.stringify({ targetUserId, stars, jobId, role }),
+        body: JSON.stringify({ targetUserId, stars, jobId, role, raterName }),
       }),
 
     adminUpdate: (adminId: string, targetUserId: string, data: any) =>
@@ -71,9 +74,14 @@ export const api = {
         method: 'DELETE',
         body: JSON.stringify({ adminId, targetUserId }),
       }),
+
+    getNotifications: (userId: string, since: string) =>
+      req<{ notifications: { id: string; text: string; created_at: string }[] }>(
+        `/user?action=notifications&userId=${userId}&since=${encodeURIComponent(since)}`
+      ),
   },
 
-  // ── Jobs ──────────────────────────────────────────────────────────────────
+  // ── Jobs ─────────────────────────────────────────────────────────────────
   jobs: {
     list: () =>
       req<{ jobs: Job[] }>('/jobs'),
@@ -119,7 +127,7 @@ export const api = {
       }),
   },
 
-  // ── Payments ──────────────────────────────────────────────────────────────
+  // ── Payments ─────────────────────────────────────────────────────────────
   payments: {
     list: (adminId: string) =>
       req<{ payments: PaymentRequest[] }>(`/payments?action=list&adminId=${adminId}`),
