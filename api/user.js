@@ -1,5 +1,12 @@
+const bcrypt = require('bcryptjs');
 const { getDb } = require('./_db');
 const { handleOptions, formatUser } = require('./_utils');
+
+const SALT_ROUNDS = 10;
+
+function isBcryptHash(str) {
+  return typeof str === 'string' && /^\$2[ab]\$/.test(str);
+}
 
 module.exports = async function handler(req, res) {
   if (handleOptions(req, res)) return;
@@ -48,7 +55,8 @@ module.exports = async function handler(req, res) {
       const adminCheck = await sql`SELECT is_admin FROM users WHERE id = ${adminId} LIMIT 1`;
       if (!adminCheck.length || !adminCheck[0].is_admin) return res.status(403).json({ error: 'Forbidden' });
       const rows = await sql`SELECT * FROM users ORDER BY joined_at DESC`;
-      return res.status(200).json({ users: rows.map(r => ({ ...formatUser(r), password: r.password_hash })) });
+      // Never expose password_hash to the frontend — return only formatted user
+      return res.status(200).json({ users: rows.map(r => formatUser(r)) });
     } catch (e) {
       console.error('all users error:', e);
       return res.status(500).json({ error: e.message || 'Server error' });
@@ -71,7 +79,6 @@ module.exports = async function handler(req, res) {
         ORDER BY created_at DESC
         LIMIT 20
       `;
-      // Mark as read
       if (rows.length > 0) {
         await sql`UPDATE notifications SET read = true WHERE for_user_id = ${userId} AND read = false AND created_at > ${since}`;
       }
@@ -126,12 +133,27 @@ module.exports = async function handler(req, res) {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       const { userId, oldPassword, newPassword } = req.body || {};
       if (!userId || !oldPassword || !newPassword) return res.status(400).json({ error: 'Missing fields' });
+
       const sql = getDb();
       const rows = await sql`SELECT * FROM users WHERE id = ${userId} LIMIT 1`;
       if (!rows.length) return res.status(404).json({ error: 'User not found' });
-      if (rows[0].password_hash !== oldPassword) return res.status(401).json({ error: 'Неверный текущий пароль' });
+
+      const user = rows[0];
+      let oldPasswordOk = false;
+
+      if (isBcryptHash(user.password_hash)) {
+        oldPasswordOk = await bcrypt.compare(oldPassword, user.password_hash);
+      } else {
+        // Legacy plaintext
+        oldPasswordOk = user.password_hash === oldPassword;
+      }
+
+      if (!oldPasswordOk) return res.status(401).json({ error: 'Неверный текущий пароль' });
       if (oldPassword === newPassword) return res.status(400).json({ error: 'Новый пароль совпадает с текущим' });
-      await sql`UPDATE users SET password_hash = ${newPassword} WHERE id = ${userId}`;
+
+      // Always hash the new password
+      const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId}`;
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error('change-password error:', e);
@@ -139,7 +161,7 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // ── rate — also stores notification for the rated user ───────────────────
+  // ── rate ──────────────────────────────────────────────────────────────────
   if (action === 'rate') {
     try {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -153,7 +175,6 @@ module.exports = async function handler(req, res) {
       } else {
         await sql`UPDATE jobs SET rating_for_author = ${stars} WHERE id = ${jobId}`;
       }
-      // Notify the rated user
       const who = raterName || (role === 'author' ? 'Исполнитель' : 'Заказчик');
       const notifText = `${who} оставил вам оценку ${stars}⭐`;
       const notifId = 'n_' + Date.now() + '_r';
@@ -186,7 +207,11 @@ module.exports = async function handler(req, res) {
           await sql`UPDATE users SET telegram = ${telegram} WHERE id = ${targetUserId}`;
           await sql`UPDATE jobs SET author_telegram = ${telegram} WHERE author_id = ${targetUserId}`;
         }
-        if (password !== undefined) await sql`UPDATE users SET password_hash = ${password} WHERE id = ${targetUserId}`;
+        if (password !== undefined) {
+          // Always hash passwords set by admin too
+          const newHash = await bcrypt.hash(password, SALT_ROUNDS);
+          await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${targetUserId}`;
+        }
         if (b !== undefined) await sql`UPDATE users SET blocked = ${b} WHERE id = ${targetUserId}`;
         if (avatar !== undefined) {
           await sql`UPDATE users SET avatar = ${avatar} WHERE id = ${targetUserId}`;
