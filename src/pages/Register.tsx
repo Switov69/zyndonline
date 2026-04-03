@@ -14,11 +14,13 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Popups flow: pwa → notifications → done
+  // Post-registration popup flow: pwa → notifications → done
   const [showPwaPopup, setShowPwaPopup] = useState(false);
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [pwaInstalling, setPwaInstalling] = useState(false);
+  // Track whether the browser permission dialog is currently pending
+  const [notifPending, setNotifPending] = useState(false);
 
   // Capture PWA install event
   useEffect(() => {
@@ -44,7 +46,6 @@ export default function Register() {
     const result = await register(username.trim(), password, telegram.trim());
     setLoading(false);
     if (result === true) {
-      // Start the post-registration flow
       if (deferredPrompt) {
         setShowPwaPopup(true);
       } else {
@@ -73,15 +74,62 @@ export default function Register() {
     setShowNotifPopup(true);
   };
 
-  const handleEnableNotifs = async () => {
-    if ('Notification' in window) {
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted') {
-        new Notification('Zynd.online', { body: 'Уведомления включены!', icon: '/favicon.ico' });
-      }
+  // KEY FIX: requestPermission() MUST be called synchronously inside the
+  // click handler (i.e. not after any preceding `await`). Browsers treat
+  // async functions that have already yielded as "not a user gesture" and
+  // silently block the permission dialog.
+  // Solution: call requestPermission() at the very top of the handler
+  // (synchronously), then .then() chain for the async response.
+  const handleEnableNotifs = () => {
+    setNotifPending(true);
+
+    const finish = () => {
+      setNotifPending(false);
+      setShowNotifPopup(false);
+      navigate('/');
+    };
+
+    if (!('Notification' in window)) {
+      // Browser doesn't support notifications — just proceed
+      finish();
+      return;
     }
-    setShowNotifPopup(false);
-    navigate('/');
+
+    if (Notification.permission === 'granted') {
+      // Already granted — fire welcome notif and move on
+      try {
+        new Notification('Zynd.online', {
+          body: 'Уведомления уже включены!',
+          icon: '/favicon.ico',
+        });
+      } catch { /* ignore */ }
+      finish();
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      // Browser blocked — we can't ask again, just proceed
+      finish();
+      return;
+    }
+
+    // permission === 'default': ask the user.
+    // IMPORTANT: Notification.requestPermission() is called synchronously
+    // here — no prior await — so the browser accepts it as a genuine
+    // user-gesture-triggered call.
+    Notification.requestPermission().then((perm) => {
+      if (perm === 'granted') {
+        try {
+          new Notification('Zynd.online', {
+            body: 'Уведомления включены! Теперь вы будете в курсе всех событий.',
+            icon: '/favicon.ico',
+          });
+        } catch { /* ignore */ }
+      }
+      finish();
+    }).catch(() => {
+      finish();
+    });
   };
 
   const handleSkipNotifs = () => {
@@ -106,31 +154,46 @@ export default function Register() {
           )}
           <div>
             <label className="block text-dark-200 text-sm font-medium mb-2">Никнейм</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Придумайте никнейм"
-              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
+            <input
+              type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+              placeholder="Придумайте никнейм"
+              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all"
+            />
           </div>
           <div>
             <label className="block text-dark-200 text-sm font-medium mb-2">Telegram</label>
-            <input type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username"
-              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
+            <input
+              type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)}
+              placeholder="@username"
+              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all"
+            />
           </div>
           <div>
             <label className="block text-dark-200 text-sm font-medium mb-2">Пароль</label>
             <div className="relative">
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Придумайте пароль"
-                className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 pr-11 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition-colors">
+              <input
+                type={showPassword ? 'text' : 'password'} value={password}
+                onChange={(e) => setPassword(e.target.value)} placeholder="Придумайте пароль"
+                className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 pr-11 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all"
+              />
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition-colors">
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
           <div>
             <label className="block text-dark-200 text-sm font-medium mb-2">Повторите пароль</label>
-            <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Повторите пароль"
-              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all" />
+            <input
+              type={showPassword ? 'text' : 'password'} value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Повторите пароль"
+              className="w-full bg-dark-900/50 border border-dark-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/20 transition-all"
+            />
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full bg-accent-500 hover:bg-accent-600 disabled:opacity-60 text-white font-medium py-3 rounded-xl transition-colors shadow-lg shadow-accent-500/20 text-sm">
+          <button
+            type="submit" disabled={loading}
+            className="w-full bg-accent-500 hover:bg-accent-600 disabled:opacity-60 text-white font-medium py-3 rounded-xl transition-colors shadow-lg shadow-accent-500/20 text-sm"
+          >
             {loading ? 'Создание...' : 'Создать аккаунт'}
           </button>
           <p className="text-center text-dark-400 text-sm">
@@ -143,10 +206,11 @@ export default function Register() {
       {/* ── PWA Install Popup ── */}
       {showPwaPopup && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          {/* Glassmorphism backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
-          <div className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
-            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+          <div
+            className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
+            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}
+          >
             <button onClick={handleSkipPwa} className="absolute top-4 right-4 text-white/40 hover:text-white/80 transition-colors">
               <X size={18} />
             </button>
@@ -182,8 +246,10 @@ export default function Register() {
       {showNotifPopup && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
-          <div className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
-            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+          <div
+            className="relative bg-dark-800/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 max-w-sm w-full shadow-2xl"
+            style={{ boxShadow: '0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' }}
+          >
             <div className="flex justify-center mb-5">
               <div className="w-16 h-16 rounded-2xl bg-accent-500/20 border border-accent-500/30 flex items-center justify-center">
                 <Bell size={28} className="text-accent-400" />
@@ -196,13 +262,16 @@ export default function Register() {
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleEnableNotifs}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-400 hover:to-accent-500 text-white rounded-2xl text-sm font-semibold transition-all shadow-lg shadow-accent-500/25"
+                disabled={notifPending}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-400 hover:to-accent-500 disabled:opacity-70 text-white rounded-2xl text-sm font-semibold transition-all shadow-lg shadow-accent-500/25"
               >
-                <Bell size={16} /> Включить уведомления
+                <Bell size={16} />
+                {notifPending ? 'Ожидаем разрешение...' : 'Включить уведомления'}
               </button>
               <button
                 onClick={handleSkipNotifs}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/10 hover:bg-white/15 text-white/70 hover:text-white rounded-2xl text-sm font-medium transition-all border border-white/10"
+                disabled={notifPending}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white/70 hover:text-white rounded-2xl text-sm font-medium transition-all border border-white/10"
               >
                 <BellOff size={16} /> Пропустить
               </button>
